@@ -1,0 +1,5 @@
+[flake8]
+exclude = .git,__pycache__,old,build,dist,bin,automated-test-framework,venv,internal*.py
+max-complexity = 10
+max-line-length = 120
+
