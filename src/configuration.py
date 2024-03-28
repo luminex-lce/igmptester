@@ -4,7 +4,7 @@
 # - On MacOS, this will be something like "en0". Use `ifconfig` to get a list of the available network interfaces.
 # - On Windows, this will be the name of your ethernet adapter.
 #   Use `ipconfig` to get a list of the available network interfaces.
-IFACE = ""
+IFACE = "eth0"
 
 # Set this to False if the DUT does not support IGMPv3
 IGMPV3_SUPPORT = True
