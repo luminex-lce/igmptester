@@ -25,6 +25,55 @@ def user_input(pytestconfig):
 
     yield suspend_guard()
 
+@pytest.mark.skipif("sys.platform.startswith('linux') or SKIP_MANUAL")
+def test_report_on_link(user_input):
+    """Verify that the device send IGMP membership report on link up
+    Although not required by the specification, it can be a good idea to transmit unsolicited
+    membership reports on a link up event. This will speed up multicast registrations since now
+    the DUT doesn't have to wait on the next query interval.
+
+    This is already an automatic test when the host operating system is a Linux system.
+    """
+    pcap_file = "output/report_on_link.pcap"
+
+    print(f"Start capture on interface {IFACE} to file {pcap_file}")
+    start_capture(IFACE, pcap_file)
+
+    print(f"Toggle link on interface {IFACE}")
+
+    with user_input:
+        input('\nDisconnect the network cable between the DUT and the test computer. Afterwards press enter')
+
+    sleep(3)
+    check_interface_up(expected=False)
+
+    with user_input:
+        input('\nReconnect the network cable between the DUT and the test computer. Afterwards press enter')
+
+    sleep(3)
+    check_interface_up()
+
+    print("Stop capture")
+    stop_capture(pcap_file)
+
+    v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
+    v3_membership_reports = packet.get_v3_membership_reports(pcap_file)
+
+    assert len(v2_membership_reports) > 0 or len(v3_membership_reports) > 0, "Received no IGMP membership reports"
+
+    found_mgroup_1_join = False
+    for report in v2_membership_reports:
+        if report["gaddr"] == MGROUP_1:
+            found_mgroup_1_join = True
+            assert report["gaddr"] == report["dst"], "Membership reports should use the same multicast destination " \
+                                                     "address as the address present in the IGMP payload"
+    for report in v3_membership_reports:
+        assert report["dst"] == "224.0.0.22", "IGMPv3 packets should be addressed to 224.0.0.22"
+        for record in report["records"]:
+            if record.maddr == MGROUP_1:
+                found_mgroup_1_join = True
+
+    assert found_mgroup_1_join, f"Expected to get an IGMP membership report for multicast group {MGROUP_1}"
 
 @pytest.mark.skipif("SKIP_MANUAL")
 def test_leave_on_config_change(user_input):

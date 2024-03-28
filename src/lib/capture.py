@@ -63,17 +63,14 @@ class CapturingProcess(Process):
 
             self.ready_event.set()
 
-            read_fds = [cap.getfd()]
-            write_fds = []
-            except_fds = []
+            if not sys.platform.startswith('win'):
+                read_fds = [cap.getfd()]
+                write_fds = []
+                except_fds = []
 
             try:
                 while self.ready_event.is_set():
-                    # use select because while we're in a blocking cap.next() signals aren't delivered,
-                    # and this process wouldn't terminate
-                    readable, _, _ = select.select(read_fds, write_fds, except_fds, 0.1)
-
-                    if cap.getfd() in readable:
+                    if sys.platform.startswith('win'):
                         hdr, pkt = cap.next()
 
                         if hdr is None:
@@ -84,6 +81,22 @@ class CapturingProcess(Process):
                         if self.stop_cb:
                             if self.stop_cb(pkt):
                                 break
+                    else:
+                        # use select because while we're in a blocking cap.next() signals aren't delivered,
+                        # and this process wouldn't terminate
+                        readable, _, _ = select.select(read_fds, write_fds, except_fds, 0.1)
+
+                        if cap.getfd() in readable:
+                            hdr, pkt = cap.next()
+
+                            if hdr is None:
+                                continue
+
+                            pcap_dumper.dump(hdr, pkt)
+
+                            if self.stop_cb:
+                                if self.stop_cb(pkt):
+                                    break
 
             finally:
                 self.ready_event.clear()

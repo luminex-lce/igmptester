@@ -3,6 +3,7 @@ The tests in this test suite are automatic tests focussed on the IGMPv2 behavior
 of devices that want to receive multicast data.
 """
 from time import sleep
+import pytest
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
 from lib.utils import check_interface_up, set_interface_link
@@ -222,11 +223,14 @@ def test_maximum_response_time():
     assert True
 
 
+@pytest.mark.skipif("not sys.platform.startswith('linux')")
 def test_report_on_link():
     """Verify that the device send IGMP membership report on link up
     Although not required by the specification, it can be a good idea to transmit unsolicited
     membership reports on a link up event. This will speed up multicast registrations since now
     the DUT doesn't have to wait on the next query interval.
+
+    This can only automatically be done if the host operating system is a Linux system.
     """
     pcap_file = "output/report_on_link.pcap"
 

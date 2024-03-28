@@ -14,13 +14,7 @@
     <li>
       <a href="#about-the-project">About The Project</a>
     </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
+    <li><a href="#getting-started">Getting Started</a></li>
     <li><a href="#usage">Usage</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
@@ -42,40 +36,135 @@ lighting products using sACN (ANSI E1.31), the default test configuration is tar
 <!-- GETTING STARTED -->
 ## Getting Started
 
-### Prerequisites
+The easiest way to get started with this tool is to use Docker. This is however only possible on Linux systems,
+since other operating systems don't supported handing network interfaces directly to the docker container.
 
-This tool uses python. It has been developped using Python 3.10.12.
+It can also be executed without docker, which should also work on Windows and MacOS, but in that case,
+you will have to make sure to install all dependencies and python packages with the right versions.
 
-The required modules can be installed using:
+### Git
+
+Install git in order to clone this repository. Alternatively, use the 'Download ZIP' function on Github.
+
+To clone this repository:
 
 ```
-python3 -m pip install -r requirements.txt
+git clone https://github.com/luminex-lce/igmptester.git
+```
+
+Afterwards, go into the cloned repository:
+
+```
+cd igmptester
+```
+
+### Docker
+
+Using the docker container only works when using a Linux operating system.
+
+Make sure to install Docker for your operating system. Afterwards, run the `run_linux.sh` script to run the test tool
+with the network interface you would like to use as parameter:
+
+```
+./run_linux.sh eth0
+```
+
+### Prerequisites
+
+This tool uses python. It has been developed using Python 3.12. Make sure to install
+this version of python from `https://www.python.org/downloads/` or using your operating
+system package manager
+
+#### Linux
+
+When using a Linux based operating system, the preferred method is to use the docker file, as described earlier.
+
+If you would like to use this tool without docker, make sure to install the pcap library and ip tools:
+
+```
+sudo apt-get install -y libpcap-dev iproute2
+```
+
+#### MacOS
+
+Install the libpcap library
+
+```
+brew install libpcap
+```
+
+#### Windows
+
+1. Install the Microsoft C++ Build tools from https:://visualstudio.microsoft.com/visual-cpp-build-tools.
+   Make sure to select 'Desktop development with C++ and the MSVC package during the installation process.
+2. Install the WinPcap developer pack from https://www.winpcap.org/devel.htm
+   Extract the package on your C:\ drive. You should get a `C:\WpdPack` folder.
+
+### Python packages and Virutal environment setup
+
+Elevated privileges (`sudo` or administrator rights) might be needed since this tool needs control over the network interface.
+
+On Linux and MacOS:
+```
+sudo su
+```
+
+Create a virtual environment. This gives the best isolation for python package management
+
+```
+python3 -m venv .venv
+```
+
+Activate the virtual environment:
+
+For Linux / MacOS:
+```
+source .venv/bin/activate
+```
+
+For Windows:
+```
+.venv\Scripts\activate.bat
+```
+
+The required python modules can be installed using:
+
+```
+python -m pip install -r docker/requirements.txt
 ```
 
 Please note that this uses the 'new' `pcapy-ng` package. If you are getting an issue
 about `PY_SSIZE_T_CLEAN macro must be defined for '#' formats`, make sure you uninstall
 `pcapy` (the old package without `-ng`).
 
-### Installation
-
-Clone this repository:
-
-```
-git clone <insert repository URL>
-```
 
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-Modify `configuration.py` to your needs. Especially change the network interface to the NIC you will be using.
+### Setup
+
+To run this tool:
+1. Make sure any program on your computer that might interact with IGMP (for example sACNViewer), is closed.
+2. Connect the device under test directly to a network interface on your computer. There should be no switch
+   in between the DUT and the test computer since that might filter IGMP packets or alter the test results.
+
+### Run
+
+Modify `src/configuration.py` to your needs. Especially change the network interface to the NIC you will be using.
 
 This tool uses `pytest`. It can be executed using:
 
 ```
-pytest -o log_cli=True
+python -m pytest -o log_cli=True
 ```
 
-Elevated privileges (`sudo` or administrator rights) might be needed since this tool needs control over the network interface.
+A specific test file or test case can be added to the command to run only that file or test case:
+
+```
+python -m pytest -o log_cli=True src/test_igmp.py::test_v2_general_query_response
+```
+
+### Results
 
 Captures created during the test will be stored in the `output/` folder and can be used for reviewing and debugging
 the test results.
@@ -84,7 +173,6 @@ the test results.
   <summary>As an example, here is the output of a test run:</summary>
 
 ```
-sudo pytest -o log_cli=True .
 ==================================================================================== test session starts ====================================================================================
 platform linux -- Python 3.10.12, pytest-7.4.4, pluggy-1.3.0
 rootdir: ~/tools/igmptester
@@ -159,6 +247,24 @@ FAILED test_igmp.py::test_report_on_link - AssertionError: Received no IGMP memb
 ===================================================================== 1 failed, 15 passed in 809.32s (0:13:29) =============================================================================
 ```
 </details>
+
+### Leave virtual environment
+
+To leave the python virtual environment when you are done testing, just run the `deactivate` command:
+```
+deactivate
+```
+
+If you used `sudo su` to activate admin privileges, you can exit this:
+```
+exit
+```
+
+<!-- ROADMAP -->
+## Roadmap
+
+- It would be nice if the network interface can be passed as an environment variable or command argument
+instead of hardcoding it in `src/configuration.py`
 
 <!-- CONTRIBUTING -->
 ## Contributing
