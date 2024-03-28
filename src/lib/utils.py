@@ -11,6 +11,7 @@ def check_interface_up(expected=True):
 
 
 def set_interface_link(up: bool):
+    assert sys.platform.startswith('linux'), 'This function uses the `ip` command and only works on Linux systems'
     if up:
         os.system(f"ip link set dev {IFACE} up")
     else:
