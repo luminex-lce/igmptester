@@ -93,6 +93,13 @@ Install the libpcap library
 brew install libpcap
 ```
 
+#### Windows
+
+1. Install the Microsoft C++ Build tools from https:://visualstudio.microsoft.com/visual-cpp-build-tools.
+   Make sure to select 'Desktop development with C++ and the MSVC package during the installation process.
+2. Install the WinPcap developer pack from https://www.winpcap.org/devel.htm
+   Extract the package on your C:\ drive. You should get a `C:\WpdPack` folder.
+
 ### Python packages and Virutal environment setup
 
 Elevated privileges (`sudo` or administrator rights) might be needed since this tool needs control over the network interface.
@@ -108,10 +115,16 @@ Create a virtual environment. This gives the best isolation for python package m
 python3 -m venv .venv
 ```
 
-Activate the virtual environment
+Activate the virtual environment:
 
+For Linux / MacOS:
 ```
 source .venv/bin/activate
+```
+
+For Windows:
+```
+.venv\Scripts\activate.bat
 ```
 
 The required python modules can be installed using:
@@ -148,7 +161,7 @@ python -m pytest -o log_cli=True
 A specific test file or test case can be added to the command to run only that file or test case:
 
 ```
-python -m pytest -o log_cli=True test_igmp.py::test_v2_general_query_response
+python -m pytest -o log_cli=True src/test_igmp.py::test_v2_general_query_response
 ```
 
 ### Results
@@ -246,6 +259,12 @@ If you used `sudo su` to activate admin privileges, you can exit this:
 ```
 exit
 ```
+
+<!-- ROADMAP -->
+## Roadmap
+
+- It would be nice if the network interface can be passed as an environment variable or command argument
+instead of hardcoding it in `src/configuration.py`
 
 <!-- CONTRIBUTING -->
 ## Contributing
