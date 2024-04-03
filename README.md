@@ -30,6 +30,10 @@ This is not a certification tool, the results of the tests do not warrant any cl
 robustness of a certain product. It is merely a testtool to validate the behavior with the sole purpose
 of increasing the stability of multicast networks, in particular in the ProAV and entertainment industry.
 
+We strongly recommend to implement IGMP according to the IETF standards:
+- IGMPv2: RFC 2236 - https://datatracker.ietf.org/doc/html/rfc2236
+- IGMPv3: RFC 3376 - https://datatracker.ietf.org/doc/html/rfc3376
+
 The tests are based on known issues. Since the primary target audience are manufacturers of professional
 lighting products using sACN (ANSI E1.31), the default test configuration is targetted for this audience.
 
