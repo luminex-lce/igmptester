@@ -4,10 +4,11 @@ of devices that want to receive multicast data.
 """
 from time import sleep
 import pytest
+import warnings
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
 from lib.utils import check_interface_up, set_interface_link
-from configuration import IFACE, MGROUP_1
+from configuration import IFACE, MGROUP_1, IGMP_MEMBERSHIP_REPORT_THRESHOLD
 
 
 def validate_membership_reports(
@@ -48,19 +49,34 @@ def validate_membership_reports(
 
     print("Check that for each membership report, the IP destination address is equal to the group address")
     gaddrs = []
+    source_ips = {}
     for report in membership_reports:
+        src = report['src']
         dst = report['dst']
         rcv_gaddr = report['gaddr']
-        assert dst == rcv_gaddr, "Received membership report from {report['src']} where destination " \
-                                 "address {dst} is not equal to the group address {rcv_gaddr}"
-        assert rcv_gaddr not in gaddrs, "Received duplicate membership report for {rcv_gaddr}"
+        assert dst == rcv_gaddr, f"Received membership report from {src} where destination " \
+                                 f"address {dst} is not equal to the group address {rcv_gaddr}"
+        assert rcv_gaddr not in gaddrs, f"Received duplicate membership report for {rcv_gaddr}"
         gaddrs.append(rcv_gaddr)
+        if src in source_ips.keys():
+            source_ips[src] += 1
+        else:
+            source_ips[src] = 1
 
     if gaddr != "0.0.0.0":
-        assert gaddr in gaddrs, "No membership report for {gaddr} received"
-        assert len(gaddrs) == 1, "Received membership report for multiple " \
-                                 "addresses as a response to the specific " \
-                                 "query for {gaddr}: {gaddrs}"
+        assert gaddr in gaddrs, f"No membership report for {gaddr} received"
+        assert len(gaddrs) == 1, f"Received membership report for multiple " \
+                                 f"addresses as a response to the specific " \
+                                 f"query for {gaddr}: {gaddrs}"
+
+    for src, count in source_ips.items():
+        assert count <= IGMP_MEMBERSHIP_REPORT_THRESHOLD, \
+            f"Received {count} membership reports from {src}. " \
+            f"There is a limit to the amount of membership reports network equipment can handle. " \
+            f"Verify that all these multicast addresses are necessary for your application."
+
+        if count > 100:
+            warnings.warn(UserWarning(f"INFO: Received {count} membership reports from {src}. This is allowed, but make sure that all of them are necessary."))
 
     assert True
 

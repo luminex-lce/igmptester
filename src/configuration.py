@@ -24,3 +24,10 @@ MGROUP_1 = "239.255.0.1"  # sACN universe 1
 # If using sACN, universe 2 corresponds with multicast address 239.255.0.2
 # MGROUP_2 is only used in manual tests
 MGROUP_2 = "239.255.0.2"  # sACN universe 2
+
+# When a single device transmits more than this amount of IGMP membership reports,
+# The test will fail. Sending too many membership reports can overwhelm the networking
+# equipment and most networking equipment has a (large) limit to the number of multicast
+# registrations are handled. Therefore it is recommended that end devices stay well below
+# such a limit with the number of multicast addresses they would like to register
+IGMP_MEMBERSHIP_REPORT_THRESHOLD = 256
