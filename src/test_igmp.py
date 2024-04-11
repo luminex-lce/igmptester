@@ -186,6 +186,7 @@ def test_maximum_response_time():
     DUT responds in time. Additionally, it is validated that there is sufficient variance on the response times in
     an attempt to detect if the DUT is using a random timer value.
     """
+    from statistics import variance, median
     print(f"Detect link up on interface {IFACE}")
     check_interface_up()
 
@@ -223,14 +224,40 @@ def test_maximum_response_time():
         # Add a small tolerance to the maximum response time to take into account
         # network transit time and timestamp inaccuracy
         max_resp = response_time + 0.1
+        last_resp = query_time
+        first = True
+        elapsed_list = []
         for report in membership_reports:
+            # Calculate that the elapsed time since the query packet is within tolerance
             elapsed = report["time"] - query_time
             print(f"Got response in {elapsed} seconds. Max is {response_time} seconds")
             assert elapsed < max_resp, f"Membership report received after {elapsed} seconds, " \
                                        f"but the maximum is {response_time} seconds"
-            response_times.append(elapsed)
+            # Only track first response for statistic calculations.
+            # Some devices may have lots of responses, this may disturb the result of the statistics
+            if first:
+                response_times.append(elapsed)
+                first = False
 
-    from statistics import variance
+            # Calculate the elapsed time since the previous membership report and verify
+            # That these are not transmitted in a burst
+            elapsed = report["time"] - last_resp
+            last_resp = report["time"]
+            elapsed_list.append(elapsed)
+
+        median_inter_response_time = median(elapsed_list)
+        assert median_inter_response_time > 0.001, \
+            f"The median time between membership responses is {median_inter_response_time}. " \
+            f"This might indicate that responses are transmitted in burst instead of randomly " \
+            f"delaying each and every response. Tranmsitting a lot of IGMP responses in burst may " \
+            f"overload the IGMP querier and cause responses to be dropped, leading to the multicast " \
+            f"registrations being dropped as well."
+
+        assert len(elapsed_list) <= IGMP_MEMBERSHIP_REPORT_THRESHOLD, \
+            f"Received {len(elapsed_list)} membership reports. " \
+            f"There is a limit to the amount of membership reports network equipment can handle. " \
+            f"Verify that all these multicast addresses are necessary for your application."
+
     var = variance(response_times)
     print(response_times)
     assert var > 0.2, f"It looks like the membership response times aren't randomly distributed " \
