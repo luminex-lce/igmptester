@@ -2,6 +2,7 @@ from configuration import IFACE
 import psutil
 import socket
 import os
+import sys
 
 
 def check_interface_up(expected=True):
