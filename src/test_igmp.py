@@ -7,7 +7,7 @@ import pytest
 import warnings
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
-from lib.utils import check_interface_up, set_interface_link
+from lib.utils import check_interface_up
 from configuration import IFACE, MGROUP_1, IGMP_MEMBERSHIP_REPORT_THRESHOLD
 
 
@@ -237,48 +237,3 @@ def test_maximum_response_time():
                       f"Variance is {var}"
 
     assert True
-
-
-@pytest.mark.skipif("not sys.platform.startswith('linux')")
-def test_report_on_link():
-    """Verify that the device send IGMP membership report on link up
-    Although not required by the specification, it can be a good idea to transmit unsolicited
-    membership reports on a link up event. This will speed up multicast registrations since now
-    the DUT doesn't have to wait on the next query interval.
-
-    This can only automatically be done if the host operating system is a Linux system.
-    """
-    pcap_file = "output/report_on_link.pcap"
-
-    print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
-
-    print(f"Toggle link on interface {IFACE}")
-    set_interface_link(up=False)
-    sleep(10)
-    check_interface_up(expected=False)
-    set_interface_link(up=True)
-    sleep(10)
-    check_interface_up()
-
-    print("Stop capture")
-    stop_capture(pcap_file)
-
-    v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
-    v3_membership_reports = packet.get_v3_membership_reports(pcap_file)
-
-    assert len(v2_membership_reports) > 0 or len(v3_membership_reports) > 0, "Received no IGMP membership reports"
-
-    found_mgroup_1_join = False
-    for report in v2_membership_reports:
-        if report["gaddr"] == MGROUP_1:
-            found_mgroup_1_join = True
-            assert report["gaddr"] == report["dst"], "Membership reports should use the same multicast destination " \
-                                                     "address as the address present in the IGMP payload"
-    for report in v3_membership_reports:
-        assert report["dst"] == "224.0.0.22", "IGMPv3 packets should be addressed to 224.0.0.22"
-        for record in report["records"]:
-            if record.maddr == MGROUP_1:
-                found_mgroup_1_join = True
-
-    assert found_mgroup_1_join, f"Expected to get an IGMP membership report for multicast group {MGROUP_1}"

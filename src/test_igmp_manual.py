@@ -25,14 +25,12 @@ def user_input(pytestconfig):
 
     yield suspend_guard()
 
-@pytest.mark.skipif("sys.platform.startswith('linux') or SKIP_MANUAL")
+@pytest.mark.skipif("SKIP_MANUAL")
 def test_report_on_link(user_input):
     """Verify that the device send IGMP membership report on link up
     Although not required by the specification, it can be a good idea to transmit unsolicited
     membership reports on a link up event. This will speed up multicast registrations since now
     the DUT doesn't have to wait on the next query interval.
-
-    This is already an automatic test when the host operating system is a Linux system.
     """
     pcap_file = "output/report_on_link.pcap"
 
