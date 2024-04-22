@@ -7,8 +7,8 @@ import pytest
 import warnings
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
-from lib.utils import check_interface_up
-from configuration import IFACE, MGROUP_1, IGMP_MEMBERSHIP_REPORT_THRESHOLD
+from lib.utils import check_interface_up, validate_igmpv2_reports, validate_igmpv2_packet_spacing
+from configuration import IFACE, MGROUP_1
 
 
 def validate_membership_reports(
@@ -41,44 +41,7 @@ def validate_membership_reports(
     print("Stop capture")
     stop_capture(pcap_file)
 
-    print("Check capture for V2 membership report")
-    membership_reports = packet.get_v2_membership_reports(pcap_file)
-    assert len(membership_reports) > 0, f"Found {len(membership_reports)} IGMPv2 membership " \
-                                        f"reports, expected at least 1"
-    print(membership_reports)
-
-    print("Check that for each membership report, the IP destination address is equal to the group address")
-    gaddrs = []
-    source_ips = {}
-    for report in membership_reports:
-        src = report['src']
-        dst = report['dst']
-        rcv_gaddr = report['gaddr']
-        assert dst == rcv_gaddr, f"Received membership report from {src} where destination " \
-                                 f"address {dst} is not equal to the group address {rcv_gaddr}"
-        assert rcv_gaddr not in gaddrs, f"Received duplicate membership report for {rcv_gaddr}"
-        gaddrs.append(rcv_gaddr)
-        if src in source_ips.keys():
-            source_ips[src] += 1
-        else:
-            source_ips[src] = 1
-
-    if gaddr != "0.0.0.0":
-        assert gaddr in gaddrs, f"No membership report for {gaddr} received"
-        assert len(gaddrs) == 1, f"Received membership report for multiple " \
-                                 f"addresses as a response to the specific " \
-                                 f"query for {gaddr}: {gaddrs}"
-
-    for src, count in source_ips.items():
-        assert count <= IGMP_MEMBERSHIP_REPORT_THRESHOLD, \
-            f"Received {count} membership reports from {src}. " \
-            f"There is a limit to the amount of membership reports network equipment can handle. " \
-            f"Verify that all these multicast addresses are necessary for your application."
-
-        if count > 100:
-            warnings.warn(UserWarning(f"INFO: Received {count} membership reports from {src}. This is allowed, but make sure that all of them are necessary."))
-
-    assert True
+    validate_igmpv2_reports(pcap_file, source_ip, gaddr)
 
 
 def test_v2_general_query_response():
@@ -186,7 +149,7 @@ def test_maximum_response_time():
     DUT responds in time. Additionally, it is validated that there is sufficient variance on the response times in
     an attempt to detect if the DUT is using a random timer value.
     """
-    from statistics import variance, median
+    from statistics import variance
     print(f"Detect link up on interface {IFACE}")
     check_interface_up()
 
@@ -207,56 +170,7 @@ def test_maximum_response_time():
         print("Stop capture")
         stop_capture(pcap_file)
 
-        print("Check capture for V2 membership report")
-        membership_reports = packet.get_v2_membership_reports(pcap_file)
-        print(membership_reports)
-        assert len(membership_reports) != 0, f"Found {len(membership_reports)} IGMPv2 membership " \
-                                             f"reports, expected at least 1"
-
-        print("Get membership query timestamp")
-        membership_query = packet.get_v2_membership_queries(pcap_file)
-        print(membership_query)
-        assert len(membership_query) == 1, f"Found {len(membership_reports)} IGMPv2 membership " \
-                                           f"queries, expected exactly 1"
-
-        print("Verify for each membership report that it arrived in time")
-        query_time = membership_query[0]["time"]
-        # Add a small tolerance to the maximum response time to take into account
-        # network transit time and timestamp inaccuracy
-        max_resp = response_time + 0.1
-        last_resp = query_time
-        first = True
-        elapsed_list = []
-        for report in membership_reports:
-            # Calculate that the elapsed time since the query packet is within tolerance
-            elapsed = report["time"] - query_time
-            print(f"Got response in {elapsed} seconds. Max is {response_time} seconds")
-            assert elapsed < max_resp, f"Membership report received after {elapsed} seconds, " \
-                                       f"but the maximum is {response_time} seconds"
-            # Only track first response for statistic calculations.
-            # Some devices may have lots of responses, this may disturb the result of the statistics
-            if first:
-                response_times.append(elapsed)
-                first = False
-
-            # Calculate the elapsed time since the previous membership report and verify
-            # That these are not transmitted in a burst
-            elapsed = report["time"] - last_resp
-            last_resp = report["time"]
-            elapsed_list.append(elapsed)
-
-        median_inter_response_time = median(elapsed_list)
-        assert median_inter_response_time > 0.001, \
-            f"The median time between membership responses is {median_inter_response_time}. " \
-            f"This might indicate that responses are transmitted in burst instead of randomly " \
-            f"delaying each and every response. Tranmsitting a lot of IGMP responses in burst may " \
-            f"overload the IGMP querier and cause responses to be dropped, leading to the multicast " \
-            f"registrations being dropped as well."
-
-        assert len(elapsed_list) <= IGMP_MEMBERSHIP_REPORT_THRESHOLD, \
-            f"Received {len(elapsed_list)} membership reports. " \
-            f"There is a limit to the amount of membership reports network equipment can handle. " \
-            f"Verify that all these multicast addresses are necessary for your application."
+        response_times.append(validate_igmpv2_packet_spacing(pcap_file))
 
     var = variance(response_times)
     print(response_times)

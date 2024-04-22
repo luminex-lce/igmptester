@@ -72,7 +72,8 @@ def get_igmp_v2_packets(capture, type):
                     "src": ip_data.src,
                     "dst": ip_data.dst,
                     "gaddr": igmp_data.gaddr,
-                    "time": pkt.time
+                    "time": pkt.time,
+                    "mrcode": igmp_data.mrcode
                     })
     return packets
 
@@ -94,13 +95,15 @@ def get_v3_membership_queries(capture):
     for pkt in scapy.utils.PcapReader(capture):
         if pkt.haslayer(IGMPv3mq):
             ip_data = pkt[IP]
-            igmp_data = pkt[IGMPv3mq]
+            igmp_data = pkt[IGMPv3]
+            igmp_mq_data = pkt[IGMPv3mq]
             assert igmp_data.resv == 0, 'The reserved field should be set to 0'
             packets.append({
                 "src": ip_data.src,
                 "dst": ip_data.dst,
                 "time": pkt.time,
-                "srcaddrs": igmp_data.srcaddrs
+                "srcaddrs": igmp_mq_data.srcaddrs,
+                "mrcode": igmp_data.mrcode
                 })
     return packets
 
