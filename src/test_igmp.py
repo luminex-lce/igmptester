@@ -41,7 +41,7 @@ def validate_membership_reports(
     print("Stop capture")
     stop_capture(pcap_file)
 
-    validate_igmpv2_reports(pcap_file, source_ip, gaddr)
+    validate_igmpv2_reports(pcap_file, gaddr)
 
 
 def test_v2_general_query_response():

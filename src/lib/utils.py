@@ -19,7 +19,6 @@ def check_interface_up(expected=True):
 
 def validate_igmpv2_reports(
         pcap_file,
-        source_ip="2.0.0.1",
         gaddr="0.0.0.0"):
     print("Check capture for V2 membership report")
     membership_reports = packet.get_v2_membership_reports(pcap_file)

@@ -93,9 +93,11 @@ def get_v2_leaves(capture):
 def get_v3_membership_queries(capture):
     packets = []
     for pkt in scapy.utils.PcapReader(capture):
-        if pkt.haslayer(IGMPv3mq):
+        if pkt.haslayer(IGMPv3) and pkt.haslayer(IGMPv3mq):
             ip_data = pkt[IP]
             igmp_data = pkt[IGMPv3]
+            if igmp_data.type != IGMPMessageType.MEMBERSHIP_QUERY.value:
+                continue
             igmp_mq_data = pkt[IGMPv3mq]
             assert igmp_data.resv == 0, 'The reserved field should be set to 0'
             packets.append({
@@ -111,8 +113,11 @@ def get_v3_membership_queries(capture):
 def get_v3_membership_reports(capture):
     packets = []
     for pkt in scapy.utils.PcapReader(capture):
-        if pkt.haslayer(IGMPv3mr):
+        if pkt.haslayer(IGMPv3) and pkt.haslayer(IGMPv3mr):
             ip_data = pkt[IP]
+            igmp_data = pkt[IGMPv3]
+            if igmp_data.type != IGMPMessageType.V3_MEMBERSHIP_REPORT.value:
+                continue
             igmp_data = pkt[IGMPv3mr]
             packets.append({
                 "src": ip_data.src,
