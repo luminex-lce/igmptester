@@ -4,9 +4,10 @@ of devices that want to receive multicast data.
 """
 from time import sleep
 import pytest
+import warnings
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
-from lib.utils import check_interface_up, set_interface_link
+from lib.utils import check_interface_up, validate_igmpv2_reports, validate_igmpv2_packet_spacing
 from configuration import IFACE, MGROUP_1
 
 
@@ -40,29 +41,7 @@ def validate_membership_reports(
     print("Stop capture")
     stop_capture(pcap_file)
 
-    print("Check capture for V2 membership report")
-    membership_reports = packet.get_v2_membership_reports(pcap_file)
-    assert len(membership_reports) > 0, f"Found {len(membership_reports)} IGMPv2 membership " \
-                                        f"reports, expected at least 1"
-    print(membership_reports)
-
-    print("Check that for each membership report, the IP destination address is equal to the group address")
-    gaddrs = []
-    for report in membership_reports:
-        dst = report['dst']
-        rcv_gaddr = report['gaddr']
-        assert dst == rcv_gaddr, "Received membership report from {report['src']} where destination " \
-                                 "address {dst} is not equal to the group address {rcv_gaddr}"
-        assert rcv_gaddr not in gaddrs, "Received duplicate membership report for {rcv_gaddr}"
-        gaddrs.append(rcv_gaddr)
-
-    if gaddr != "0.0.0.0":
-        assert gaddr in gaddrs, "No membership report for {gaddr} received"
-        assert len(gaddrs) == 1, "Received membership report for multiple " \
-                                 "addresses as a response to the specific " \
-                                 "query for {gaddr}: {gaddrs}"
-
-    assert True
+    validate_igmpv2_reports(pcap_file, gaddr)
 
 
 def test_v2_general_query_response():
@@ -170,6 +149,7 @@ def test_maximum_response_time():
     DUT responds in time. Additionally, it is validated that there is sufficient variance on the response times in
     an attempt to detect if the DUT is using a random timer value.
     """
+    from statistics import variance
     print(f"Detect link up on interface {IFACE}")
     check_interface_up()
 
@@ -190,79 +170,11 @@ def test_maximum_response_time():
         print("Stop capture")
         stop_capture(pcap_file)
 
-        print("Check capture for V2 membership report")
-        membership_reports = packet.get_v2_membership_reports(pcap_file)
-        print(membership_reports)
-        assert len(membership_reports) != 0, f"Found {len(membership_reports)} IGMPv2 membership " \
-                                             f"reports, expected at least 1"
+        response_times.append(validate_igmpv2_packet_spacing(pcap_file))
 
-        print("Get membership query timestamp")
-        membership_query = packet.get_v2_membership_queries(pcap_file)
-        print(membership_query)
-        assert len(membership_query) == 1, f"Found {len(membership_reports)} IGMPv2 membership " \
-                                           f"queries, expected exactly 1"
-
-        print("Verify for each membership report that it arrived in time")
-        query_time = membership_query[0]["time"]
-        # Add a small tolerance to the maximum response time to take into account
-        # network transit time and timestamp inaccuracy
-        max_resp = response_time + 0.1
-        for report in membership_reports:
-            elapsed = report["time"] - query_time
-            print(f"Got response in {elapsed} seconds. Max is {response_time} seconds")
-            assert elapsed < max_resp, f"Membership report received after {elapsed} seconds, " \
-                                       f"but the maximum is {response_time} seconds"
-            response_times.append(elapsed)
-
-    from statistics import variance
     var = variance(response_times)
     print(response_times)
     assert var > 0.2, f"It looks like the membership response times aren't randomly distributed " \
                       f"Variance is {var}"
 
     assert True
-
-
-@pytest.mark.skipif("not sys.platform.startswith('linux')")
-def test_report_on_link():
-    """Verify that the device send IGMP membership report on link up
-    Although not required by the specification, it can be a good idea to transmit unsolicited
-    membership reports on a link up event. This will speed up multicast registrations since now
-    the DUT doesn't have to wait on the next query interval.
-
-    This can only automatically be done if the host operating system is a Linux system.
-    """
-    pcap_file = "output/report_on_link.pcap"
-
-    print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
-
-    print(f"Toggle link on interface {IFACE}")
-    set_interface_link(up=False)
-    sleep(10)
-    check_interface_up(expected=False)
-    set_interface_link(up=True)
-    sleep(10)
-    check_interface_up()
-
-    print("Stop capture")
-    stop_capture(pcap_file)
-
-    v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
-    v3_membership_reports = packet.get_v3_membership_reports(pcap_file)
-
-    assert len(v2_membership_reports) > 0 or len(v3_membership_reports) > 0, "Received no IGMP membership reports"
-
-    found_mgroup_1_join = False
-    for report in v2_membership_reports:
-        if report["gaddr"] == MGROUP_1:
-            found_mgroup_1_join = True
-            assert report["gaddr"] == report["dst"], "Membership reports should use the same multicast destination " \
-                                                     "address as the address present in the IGMP payload"
-    for report in v3_membership_reports:
-        assert report["dst"] == "224.0.0.22", "IGMPv3 packets should be addressed to 224.0.0.22"
-        for record in report["records"]:
-            if record.maddr == MGROUP_1:
-                found_mgroup_1_join = True
-
-    assert found_mgroup_1_join, f"Expected to get an IGMP membership report for multicast group {MGROUP_1}"

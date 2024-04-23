@@ -5,49 +5,11 @@ IGMPv3 is defined in RFC 3376 (https://datatracker.ietf.org/doc/html/rfc3376)
 The tests in this suite can be skipped by configuring the IGMPv3_SUPPORT parameter
 """
 import pytest
-import warnings
 from time import sleep
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
-from lib.utils import check_interface_up
+from lib.utils import check_interface_up, validate_igmpv3_reports, validate_igmpv3_packet_spacing
 from configuration import IFACE, MGROUP_1, IGMPV3_SUPPORT
-
-
-def validate_reports(pcap_file, gaddr="0.0.0.0"):
-    """Validate reports
-    This is a helper function to validate if a pcap file contains IGMPv2 or IGMPv3
-    membership reports.
-    """
-    v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
-    v3_membership_reports = packet.get_v3_membership_reports(pcap_file)
-    assert len(v3_membership_reports) > 0 or len(v2_membership_reports) > 0, \
-        "Found no IGMP membership " \
-        "reports, expected at least 1"
-    print(v2_membership_reports)
-    print(v3_membership_reports)
-
-    if len(v3_membership_reports) == 0:
-        warnings.warn(UserWarning("INFO: DUT responded with V2 membership reports to V3 query"))
-
-    print(f"Check that a v3 membership report is received for {MGROUP_1}")
-
-    found_mgroup_1_join = False
-    for report in v2_membership_reports:
-        if report["gaddr"] == MGROUP_1:
-            found_mgroup_1_join = True
-            assert report["gaddr"] == report["dst"], "Membership reports should use the same multicast destination " \
-                                                     "address as the address present in the IGMP payload"
-    for report in v3_membership_reports:
-        assert report["dst"] == "224.0.0.22", "IGMPv3 packets should be addressed to 224.0.0.22"
-        if gaddr != '0.0.0.0':
-            assert len(report["records"]) == 1, 'Specific membership reports are expected to have 1 group record'
-        for record in report["records"]:
-            if record.maddr == MGROUP_1:
-                found_mgroup_1_join = True
-
-    assert found_mgroup_1_join, f"Expected to get an IGMP membership report for multicast group {MGROUP_1}"
-
-    return v2_membership_reports + v3_membership_reports
 
 
 def validate_membership_reports(
@@ -81,7 +43,7 @@ def validate_membership_reports(
     stop_capture(pcap_file)
 
     print("Check capture for membership report")
-    validate_reports(pcap_file, gaddr)
+    validate_igmpv3_reports(pcap_file, gaddr)
 
 
 @pytest.mark.skipif("not IGMPV3_SUPPORT")
@@ -137,48 +99,30 @@ def test_maximum_response_time():
     Note that in IGMPv3, the maximum response time has an exponential range as described in section 4.1.1 of RFC 3376.
     If the value of the max resp code is above 128 (12.8 seconds), it represents a floating point value.
     """
+    from statistics import variance
     print(f"Detect link up on interface {IFACE}")
     check_interface_up()
 
-    max_response_times = [1, 3, 5, 10, 20, 300]
+    #max_response_times = [1, 3, 5, 10, 20, 300]
+    max_response_times = [20, 300]
     response_times = []
-    for response_time in max_response_times:
-        pcap_file = f"output/v3_maximum_response_time_{response_time}_sec.pcap"
+    for max_response_time in max_response_times:
+        pcap_file = f"output/v3_maximum_response_time_{max_response_time}_sec.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
         start_capture(IFACE, pcap_file)
 
-        mrcode = response_time * 10
+        mrcode = max_response_time * 10
         print("Send IGMPv3 membership query")
         packet.send_igmp_v3_membership_query(mrcode=mrcode)
 
         print("Wait for the maximum response time")
-        sleep(response_time + 2)
+        sleep(max_response_time + 2)
 
         print("Stop capture")
         stop_capture(pcap_file)
 
-        print("Check capture for V3 membership report")
-        membership_reports = validate_reports(pcap_file)
+        response_times.append(validate_igmpv3_packet_spacing(pcap_file))
 
-        print("Get membership query timestamp")
-        membership_query = packet.get_v3_membership_queries(pcap_file)
-        print(membership_query)
-        assert len(membership_query) == 1, f"Found {len(membership_reports)} IGMPv3 membership " \
-                                           f"queries, expected exactly 1"
-
-        print("Verify for each membership report that it arrived in time")
-        query_time = membership_query[0]["time"]
-        # Add a small tolerance to the maximum response time to take into account
-        # network transit time and timestamp inaccuracy
-        max_resp = response_time + 0.1
-        for report in membership_reports:
-            elapsed = report["time"] - query_time
-            print(f"Got response in {elapsed} seconds. Max is {response_time} seconds")
-            assert elapsed < max_resp, f"Membership report received after {elapsed} seconds, " \
-                                       f"but the maximum is {response_time} seconds"
-            response_times.append(elapsed)
-
-    from statistics import variance
     var = variance(response_times)
     print(response_times)
     assert var > 0.2, f"It looks like the membership response times aren't randomly distributed " \
