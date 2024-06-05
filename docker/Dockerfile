@@ -10,5 +10,5 @@ WORKDIR /App
 
 ENV RUNNING_IN_DOCKER Yes
 
-ENTRYPOINT ["python3", "-m", "pytest", "-o", "log_cli=True"]
+ENTRYPOINT ["/bin/bash", "-c", "python3 -m pytest --junit-xml=./output/result_\"$(date +%Y%m%d_%H%M%S)\".junit"]
 
