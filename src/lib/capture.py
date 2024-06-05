@@ -41,15 +41,15 @@ class CapturingProcess(Process):
         if not self.ready_event.wait(5):
             if self.exception:
                 _, traceback = self.exception
-                raise(Exception(traceback))
+                raise (Exception(traceback))
 
     def stop(self):
         self.ready_event.clear()
         if self.exception:
             _, traceback = self.exception
-            raise(Exception(traceback))
+            raise (Exception(traceback))
 
-    def run(self):
+    def run(self):  # noqa: C901
         print("Starting CapturingProcess on interface {} with '{}' as bpf filter and dumping data to {}"
               .format(self.interface, self.bpf_filter, self.filename))
         try:

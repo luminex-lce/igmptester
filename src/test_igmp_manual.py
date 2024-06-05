@@ -8,7 +8,7 @@ from time import sleep
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
 from lib.utils import check_interface_up
-from configuration import IFACE, MGROUP_1, MGROUP_2, SKIP_MANUAL
+from configuration import IFACE, MGROUP_1, MGROUP_2, SKIP_MANUAL  # noqa: F401
 
 
 @pytest.fixture(scope="module")
@@ -24,6 +24,7 @@ def user_input(pytestconfig):
             self.capmanager.resume_global_capture()
 
     yield suspend_guard()
+
 
 @pytest.mark.skipif("SKIP_MANUAL")
 def test_report_on_link(user_input):
@@ -72,6 +73,7 @@ def test_report_on_link(user_input):
                 found_mgroup_1_join = True
 
     assert found_mgroup_1_join, f"Expected to get an IGMP membership report for multicast group {MGROUP_1}"
+
 
 @pytest.mark.skipif("SKIP_MANUAL")
 def test_leave_on_config_change(user_input):

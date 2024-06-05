@@ -3,8 +3,6 @@ The tests in this test suite are automatic tests focussed on the IGMPv2 behavior
 of devices that want to receive multicast data.
 """
 from time import sleep
-import pytest
-import warnings
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
 from lib.utils import check_interface_up, validate_igmpv2_reports, validate_igmpv2_packet_spacing

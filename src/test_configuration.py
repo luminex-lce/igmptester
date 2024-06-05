@@ -4,7 +4,7 @@ This test suite validates that the test configuration is valid.
 import pytest
 from ipaddress import IPv4Address
 from lib.utils import check_interface_up
-from configuration import IFACE, MGROUP_1, MGROUP_2, SKIP_MANUAL
+from configuration import IFACE, MGROUP_1, MGROUP_2, SKIP_MANUAL  # noqa: F401
 
 
 def test_interface():
@@ -31,7 +31,8 @@ def test_mgroup_1():
     """This test validates that the value for MGROUP_1 is configured
     """
 
-    assert MGROUP_1, "Make sure to configure a valid IPv4 multicast address under the `MGROUP_1` variable in configuration.py"
+    assert MGROUP_1, "Make sure to configure a valid IPv4 multicast address under the " \
+                     "`MGROUP_1` variable in configuration.py"
     validate_multicast_ip(MGROUP_1)
 
 
@@ -40,6 +41,7 @@ def test_mgroup_2():
     """This test validates that the value for MGROUP_1 is configured
     """
 
-    assert MGROUP_2, "Make sure to configure a valid IPv4 multicast address under the `MGROUP_2` variable in configuration.py"
+    assert MGROUP_2, "Make sure to configure a valid IPv4 multicast address under the " \
+                     "`MGROUP_2` variable in configuration.py"
     validate_multicast_ip(MGROUP_2)
     assert MGROUP_1 != MGROUP_2, "The value of MGROUP_1 shouldn't be equal to MGROUP_2"

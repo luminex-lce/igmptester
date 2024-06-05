@@ -9,7 +9,7 @@ from time import sleep
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
 from lib.utils import check_interface_up, validate_igmpv3_reports, validate_igmpv3_packet_spacing
-from configuration import IFACE, MGROUP_1, IGMPV3_SUPPORT
+from configuration import IFACE, MGROUP_1, IGMPV3_SUPPORT  # noqa: F401
 
 
 def validate_membership_reports(
@@ -103,8 +103,7 @@ def test_maximum_response_time():
     print(f"Detect link up on interface {IFACE}")
     check_interface_up()
 
-    #max_response_times = [1, 3, 5, 10, 20, 300]
-    max_response_times = [20, 300]
+    max_response_times = [1, 3, 5, 10, 20, 300]
     response_times = []
     for max_response_time in max_response_times:
         pcap_file = f"output/v3_maximum_response_time_{max_response_time}_sec.pcap"
