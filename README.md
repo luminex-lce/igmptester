@@ -168,6 +168,21 @@ A specific test file or test case can be added to the command to run only that f
 python -m pytest -o log_cli=True src/test_igmp.py::test_v2_general_query_response
 ```
 
+The test results can be stored in a JUnit file by adding the `--junit-xml` parameter followed by the path to the file:
+
+```
+python -m pytest -o log_cli=True --junit-xml=./output/result.junit
+```
+
+This file can be viewed in the browser, for example using junit2html:
+
+```
+pip install junit2xml
+junit2xml ./output/result.junit
+open ./output/result.junit.html
+```
+
+
 ### Results
 
 Captures created during the test will be stored in the `output/` folder and can be used for reviewing and debugging

@@ -39,5 +39,5 @@ IGMP_MEMBERSHIP_REPORT_THRESHOLD = 256
 # If it is IGMPv3, make sure to enable IGMPV3_SUPPORT above.
 # Set the following parameter to the path to the pcap file
 # Run the test by appending `src/test_pcap.py` to the run command
-#PCAP_FILE = "output/my_capture.pcapng"
+# PCAP_FILE = "output/my_capture.pcapng"
 PCAP_FILE = False

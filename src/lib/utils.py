@@ -4,7 +4,6 @@ import psutil
 import socket
 import os
 import warnings
-import struct
 from statistics import median
 
 
@@ -48,6 +47,11 @@ def validate_igmpv2_reports(
                                  f"addresses as a response to the specific " \
                                  f"query for {gaddr}: {gaddrs}"
 
+    if len(source_ips) > 1:
+        warnings.warn(UserWarning(f"INFO: Received membership reports from {len(source_ips)} "
+                                  "different sources. Make sure you only test 1 device at a time. "
+                                  "[{source_ips.keys()}]."))
+
     for src, count in source_ips.items():
         assert count <= IGMP_MEMBERSHIP_REPORT_THRESHOLD, \
             f"Received {count} membership reports from {src}. " \
@@ -55,7 +59,8 @@ def validate_igmpv2_reports(
             f"Verify that all these multicast addresses are necessary for your application."
 
         if count > 100:
-            warnings.warn(UserWarning(f"INFO: Received {count} membership reports from {src}. This is allowed, but make sure that all of them are necessary."))
+            warnings.warn(UserWarning(f"INFO: Received {count} membership reports from {src}. "
+                                      "This is allowed, but make sure that all of them are necessary."))
 
     assert True
 
@@ -96,6 +101,7 @@ def validate_igmpv3_reports(pcap_file, gaddr="0.0.0.0"):
 
     return v2_membership_reports + v3_membership_reports
 
+
 def validate_reports(query_time, max_response_time, membership_reports):
     print("Verify for each membership report that it arrived in time")
     # Add a small tolerance to the maximum response time to take into account
@@ -112,7 +118,7 @@ def validate_reports(query_time, max_response_time, membership_reports):
                                    f"but the maximum is {max_response_time} seconds"
         # Only track first response for statistic calculations.
         # Some devices may have lots of responses, this may disturb the result of the statistics
-        if response_time == None:
+        if response_time is None:
             response_time = elapsed
 
         # Calculate the elapsed time since the previous membership report and verify
@@ -135,6 +141,7 @@ def validate_reports(query_time, max_response_time, membership_reports):
         f"Verify that all these multicast addresses are necessary for your application."
 
     return response_time
+
 
 def validate_igmpv2_packet_spacing(pcap_file):
     print("Check capture for V2 membership report")
@@ -175,5 +182,3 @@ def validate_igmpv3_packet_spacing(pcap_file):
         mant = mrcode & 0xF  # 0xF = b'0000 1111'
         max_response_time = (mant | 0x10) << (exp + 3)
     return validate_reports(query_time, max_response_time, membership_reports)
-
-
