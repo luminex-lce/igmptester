@@ -50,7 +50,7 @@ def validate_igmpv2_reports(
     if len(source_ips) > 1:
         warnings.warn(UserWarning(f"INFO: Received membership reports from {len(source_ips)} "
                                   "different sources. Make sure you only test 1 device at a time. "
-                                  "[{source_ips.keys()}]."))
+                                  f"[{source_ips.keys()}]."))
 
     for src, count in source_ips.items():
         assert count <= IGMP_MEMBERSHIP_REPORT_THRESHOLD, \

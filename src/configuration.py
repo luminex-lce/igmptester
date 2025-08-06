@@ -6,7 +6,10 @@
 #   Use `ipconfig` to get a list of the available network interfaces.
 IFACE = "eth0"
 
-# Set this to False if the DUT does not support IGMPv3
+# Set this to False if you don't want to run IGMPv3 tests
+# NOTE: devices don't have to implement IGMPv3 to support IGMPv3 membership queries. As outlined in section 2.5 of
+# the IGMPv2 RFC 2236:
+#   Note that IGMP messages may be longer than 8 octects, especially future backwards-compatible versions off IGMP.
 IGMPV3_SUPPORT = True
 
 # Set this to True to skip the tests requiring manual actions

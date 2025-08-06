@@ -40,7 +40,7 @@ lighting products using sACN (ANSI E1.31), the default test configuration is tar
 <!-- GETTING STARTED -->
 ## Getting Started
 
-The easiest way to get started with this tool is to use Docker. This is however only possible on Linux systems,
+**_NOTE:_** The easiest way to get started with this tool is to use Docker. This is however only possible on Linux systems,
 since other operating systems don't supported handing network interfaces directly to the docker container.
 
 It can also be executed without docker, which should also work on Windows and MacOS, but in that case,
@@ -66,12 +66,20 @@ cd igmptester
 
 Using the docker container only works when using a Linux operating system.
 
+Root priviliges might be required, to configure the `macvlan` interface used for the connection to the docker container:
+
+```
+sudo su
+```
+
 Make sure to install Docker for your operating system. Afterwards, run the `run_linux.sh` script to run the test tool
 with the network interface you would like to use as parameter:
 
 ```
 ./run_linux.sh eth0
 ```
+
+Check the "Usage" section below for more information on how to use the tool. Further installation steps are not needed when using the Docker method.
 
 ### Prerequisites
 
