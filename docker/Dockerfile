@@ -8,7 +8,7 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 VOLUME ["/App"]
 WORKDIR /App
 
-ENV RUNNING_IN_DOCKER Yes
+ENV RUNNING_IN_DOCKER=Yes
 
 ENTRYPOINT ["/bin/bash", "-c", "python3 -m pytest --junit-xml=./output/result_\"$(date +%Y%m%d_%H%M%S)\".junit"]
 
