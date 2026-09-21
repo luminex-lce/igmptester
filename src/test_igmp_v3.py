@@ -48,6 +48,53 @@ def validate_membership_reports(
 
 
 @pytest.mark.skipif("not IGMPV3_SUPPORT")
+def test_v3_is_implemented():
+    """Verify that the device actually implements IGMPv3 and does not only fall back to IGMPv2
+    A device is allowed to answer an IGMPv3 query with an IGMPv2 membership report: that is the
+    backwards compatible mode described in section 7.3.2 of RFC 3376 and it interoperates fine.
+    It does mean the device does not implement IGMPv3 though, and the remaining tests in this
+    suite cannot tell you anything about its IGMPv3 behavior, so this is reported as a failure to
+    make it visible rather than letting the rest of the suite pass on IGMPv2 evidence.
+    If this is the only failing test in this suite, read it as a warning: the device works, but it
+    does not speak IGMPv3. Set IGMPV3_SUPPORT to False in the configuration to skip this suite.
+    """
+    print(f"Detect link up on interface {IFACE}")
+    check_interface_up()
+
+    pcap_file = "output/v3_is_implemented.pcap"
+    print(f"Start capture on interface {IFACE} to file {pcap_file}")
+    start_capture(IFACE, pcap_file)
+
+    max_response_time = 1  # seconds
+    print("Send IGMPv3 membership query")
+    packet.send_igmp_v3_membership_query(mrcode=max_response_time * 10)
+
+    print("Wait membership response timeout + a little margin")
+    sleep(max_response_time + 1)
+
+    print("Stop capture")
+    stop_capture(pcap_file)
+
+    v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
+    v3_membership_reports = packet.get_v3_membership_reports(pcap_file)
+    print(v2_membership_reports)
+    print(v3_membership_reports)
+
+    assert len(v2_membership_reports) > 0 or len(v3_membership_reports) > 0, \
+        "Received no membership reports at all in response to an IGMPv3 general query. " \
+        "The device does not appear to respond to IGMPv3 queries."
+
+    assert len(v3_membership_reports) > 0, \
+        f"The device answered an IGMPv3 general query with {len(v2_membership_reports)} IGMPv2 " \
+        f"membership report(s) and no IGMPv3 membership reports. This is the IGMPv2 backwards " \
+        f"compatible mode of section 7.3.2 of RFC 3376. It is acceptable and the device will " \
+        f"work on an IGMPv3 network, so treat this failure as a warning rather than a defect: " \
+        f"it means the device does not implement IGMPv3. Note that the other tests in this " \
+        f"suite accept IGMPv2 reports as evidence, so they cannot confirm any IGMPv3 behavior " \
+        f"for this device. Set IGMPV3_SUPPORT to False in the configuration to skip this suite."
+
+
+@pytest.mark.skipif("not IGMPV3_SUPPORT")
 def test_v3_general_query_response():
     """Verify that the device responds to a IGMPv3 general membership query
     """

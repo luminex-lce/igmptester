@@ -1,7 +1,6 @@
 from configuration import IFACE, MGROUP_1, IGMP_MEMBERSHIP_REPORT_THRESHOLD
 import lib.packet as packet
 import psutil
-import socket
 import os
 import warnings
 from statistics import median
@@ -11,9 +10,18 @@ def check_interface_up(expected=True):
     if os.environ.get('RUNNING_IN_DOCKER', False):
         # When running inside a Docker container, the interface is always up.
         return
-    interface_addrs = psutil.net_if_addrs().get(IFACE) or []
-    up = socket.AF_INET in [snicaddr.family for snicaddr in interface_addrs]
-    assert up == expected, f'Interface {IFACE} is not in the expected link state (up = {expected})'
+    # Use the link state reported by the driver rather than the presence of an IPv4
+    # address. The two are different properties: the DUT is normally cabled directly
+    # to the test computer with no DHCP server, so a perfectly good link often has no
+    # address at all, while a statically configured interface keeps its address after
+    # the cable is unplugged.
+    interface_stats = psutil.net_if_stats().get(IFACE)
+    assert interface_stats is not None, \
+        f'Interface {IFACE} does not exist. Set IFACE in configuration.py to one of: ' \
+        f'{sorted(psutil.net_if_stats().keys())}'
+    up = interface_stats.isup
+    assert up == expected, f'Interface {IFACE} is not in the expected link state ' \
+                           f'(expected up = {expected}, actual up = {up})'
 
 
 def validate_igmpv2_reports(
