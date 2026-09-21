@@ -159,6 +159,23 @@ def _reported_failure(capture_proc):
     return f'. The capturing process reported:\n{tb}'
 
 
+def _release_capture(filename, capture_proc):
+    '''
+    Remove a capture from the registry and make sure its process is gone.
+
+    Both have to happen even when the teardown above raised, and they have to happen
+    together: dropping the registry entry is what stops a failed capture from
+    blocking later captures to the same file, but it also drops the last reference to
+    the process, so anything still running at that point could never be stopped again.
+    '''
+    try:
+        if capture_proc.is_alive():
+            capture_proc.terminate()
+            capture_proc.join(8)
+    finally:
+        del capture_procs[filename]
+
+
 def start_capture(interface, filename, **kwargs):
     '''
     start a capture
@@ -184,10 +201,7 @@ def start_capture(interface, filename, **kwargs):
         # A capture that never started must not stay registered, otherwise the next
         # attempt to capture to this file fails with 'duplicate capture' instead of
         # the real reason. Make sure the process is not left running either.
-        del capture_procs[filename]
-        if p.is_alive():
-            p.terminate()
-            p.join(8)
+        _release_capture(filename, p)
         raise
 
 
@@ -198,10 +212,10 @@ def stop_capture(filename):
         raise Exception('Capture \'{}\'was never started'.format(filename))
 
     t = capture_procs[filename]
-    # Drop the capture from the registry whatever happens below. Leaving a failed
-    # capture behind makes every later start_capture for the same file fail with
-    # 'Trying to start duplicate capture', so a single genuine failure turns into a
-    # string of unrelated ones in the tests that follow.
+    # Release the capture whatever happens below. Leaving a failed capture registered
+    # makes every later start_capture for the same file fail with 'Trying to start
+    # duplicate capture', so a single genuine failure turns into a string of
+    # unrelated ones in the tests that follow.
     try:
         t.stop()
         t.join(1)
@@ -214,7 +228,7 @@ def stop_capture(filename):
             raise Exception("Capture '{}': process exited abnormally ({}){}"
                             .format(filename, t.exitcode, _reported_failure(t)))
     finally:
-        del capture_procs[filename]
+        _release_capture(filename, t)
 
 
 def waitfor_capture(filename, timeout=0):
@@ -236,7 +250,7 @@ def waitfor_capture(filename, timeout=0):
 
     t = capture_procs[filename]
 
-    # As in stop_capture, the registry entry has to go even when the teardown fails.
+    # As in stop_capture, the capture has to be released even when the teardown fails.
     try:
         t.join(timeout)
 
@@ -254,6 +268,6 @@ def waitfor_capture(filename, timeout=0):
             raise Exception("Capture '{}': process exited abnormally ({}){}"
                             .format(filename, t.exitcode, _reported_failure(t)))
     finally:
-        del capture_procs[filename]
+        _release_capture(filename, t)
 
     return timedout
