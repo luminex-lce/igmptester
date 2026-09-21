@@ -9,7 +9,8 @@ from time import sleep
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
 from lib.utils import check_interface_up, validate_igmpv3_reports, validate_igmpv3_packet_spacing
-from configuration import IFACE, MGROUP_1, IGMPV3_SUPPORT  # noqa: F401
+from configuration import (IFACE, MGROUP_1, IGMPV3_SUPPORT,  # noqa: F401
+                           RANDOMNESS_SAMPLE_COUNT, RANDOMNESS_MAX_RESPONSE_TIME)
 
 
 def validate_membership_reports(
@@ -98,24 +99,59 @@ def test_maximum_response_time():
 
     Note that in IGMPv3, the maximum response time has an exponential range as described in section 4.1.1 of RFC 3376.
     If the value of the max resp code is above 128 (12.8 seconds), it represents a floating point value.
+    Because that encoding is lossy, the test validates against the response time the query actually
+    carries rather than the one that was requested.
+    The randomness of the response time is measured separately, over repeated queries that all carry
+    the same maximum response time.
     """
     from statistics import variance
     print(f"Detect link up on interface {IFACE}")
     check_interface_up()
 
     max_response_times = [1, 3, 5, 10, 20, 300]
-    response_times = []
     for max_response_time in max_response_times:
         pcap_file = f"output/v3_maximum_response_time_{max_response_time}_sec.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
         start_capture(IFACE, pcap_file)
 
         mrcode = max_response_time * 10
+        # The Max Resp Code field is a single byte, so a large mrcode is quantised to
+        # the nearest representable value when it is encoded. Wait for, and validate
+        # against, the window the query actually carries rather than the one asked
+        # for: mrcode 3000 transmits 294.4 seconds, not 300.
+        encoded_response_time = packet.encoded_max_response_time(mrcode)
+        if encoded_response_time != max_response_time:
+            print(f"Requested {max_response_time} seconds, query actually carries "
+                  f"{encoded_response_time} seconds")
+
         print("Send IGMPv3 membership query")
         packet.send_igmp_v3_membership_query(mrcode=mrcode)
 
         print("Wait for the maximum response time")
-        sleep(max_response_time + 2)
+        sleep(encoded_response_time + 2)
+
+        print("Stop capture")
+        stop_capture(pcap_file)
+
+        validate_igmpv3_packet_spacing(pcap_file)
+
+    # Verify that the DUT picks a random delay rather than always answering after a
+    # fixed part of the window. This has to be measured over repeated queries with
+    # the SAME maximum response time: pooling the responses to queries with
+    # different maximums measures the spread of the maximums we chose ourselves, so
+    # even a DUT that always answers at exactly the maximum would look random.
+    repeated_response_time = RANDOMNESS_MAX_RESPONSE_TIME
+    response_times = []
+    for attempt in range(RANDOMNESS_SAMPLE_COUNT):
+        pcap_file = f"output/v3_maximum_response_time_randomness_{attempt}.pcap"
+        print(f"Start capture on interface {IFACE} to file {pcap_file}")
+        start_capture(IFACE, pcap_file)
+
+        print("Send IGMPv3 membership query")
+        packet.send_igmp_v3_membership_query(mrcode=repeated_response_time * 10)
+
+        print("Wait for the maximum response time")
+        sleep(repeated_response_time + 2)
 
         print("Stop capture")
         stop_capture(pcap_file)
@@ -124,7 +160,7 @@ def test_maximum_response_time():
 
     var = variance(response_times)
     print(response_times)
-    assert var > 0.2, f"It looks like the membership response times aren't randomly distributed " \
-                      f"Variance is {var}"
-
-    assert True
+    assert var > 0.2, f"It looks like the membership response times aren't randomly distributed. " \
+                      f"Response times to {RANDOMNESS_SAMPLE_COUNT} queries with the same maximum " \
+                      f"response time of {repeated_response_time} seconds were {response_times}, " \
+                      f"variance is {var}"

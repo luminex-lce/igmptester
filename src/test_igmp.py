@@ -6,7 +6,7 @@ from time import sleep
 import lib.packet as packet
 from lib.capture import start_capture, stop_capture
 from lib.utils import check_interface_up, validate_igmpv2_reports, validate_igmpv2_packet_spacing
-from configuration import IFACE, MGROUP_1
+from configuration import IFACE, MGROUP_1, RANDOMNESS_SAMPLE_COUNT, RANDOMNESS_MAX_RESPONSE_TIME
 
 
 def validate_membership_reports(
@@ -152,7 +152,6 @@ def test_maximum_response_time():
     check_interface_up()
 
     max_response_times = [1, 3, 5, 10, 20]
-    response_times = []
     for response_time in max_response_times:
         pcap_file = f"output/maximum_response_time_{response_time}_sec.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
@@ -168,11 +167,34 @@ def test_maximum_response_time():
         print("Stop capture")
         stop_capture(pcap_file)
 
+        validate_igmpv2_packet_spacing(pcap_file)
+
+    # Verify that the DUT picks a random delay rather than always answering after a
+    # fixed part of the window. This has to be measured over repeated queries with
+    # the SAME maximum response time: pooling the responses to queries with
+    # different maximums measures the spread of the maximums we chose ourselves, so
+    # even a DUT that always answers at exactly the maximum would look random.
+    repeated_response_time = RANDOMNESS_MAX_RESPONSE_TIME
+    response_times = []
+    for attempt in range(RANDOMNESS_SAMPLE_COUNT):
+        pcap_file = f"output/maximum_response_time_randomness_{attempt}.pcap"
+        print(f"Start capture on interface {IFACE} to file {pcap_file}")
+        start_capture(IFACE, pcap_file)
+
+        print("Send IGMPv2 membership query")
+        packet.send_igmp_v2_membership_query(mrcode=repeated_response_time * 10)
+
+        print("Wait for the maximum response time")
+        sleep(repeated_response_time + 2)
+
+        print("Stop capture")
+        stop_capture(pcap_file)
+
         response_times.append(validate_igmpv2_packet_spacing(pcap_file))
 
     var = variance(response_times)
     print(response_times)
-    assert var > 0.2, f"It looks like the membership response times aren't randomly distributed " \
-                      f"Variance is {var}"
-
-    assert True
+    assert var > 0.2, f"It looks like the membership response times aren't randomly distributed. " \
+                      f"Response times to {RANDOMNESS_SAMPLE_COUNT} queries with the same maximum " \
+                      f"response time of {repeated_response_time} seconds were {response_times}, " \
+                      f"variance is {var}"

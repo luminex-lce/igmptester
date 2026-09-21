@@ -35,6 +35,15 @@ MGROUP_2 = "239.255.0.2"  # sACN universe 2
 # such a limit with the number of multicast addresses they would like to register
 IGMP_MEMBERSHIP_REPORT_THRESHOLD = 256
 
+# A DUT has to delay each membership report by a random time between zero and the
+# maximum response time of the query. To check that, the suite sends several queries
+# that all carry the SAME maximum response time and looks at the spread of the
+# replies. These two settings control that check. More samples make it more reliable
+# but each one costs roughly the response time in wall clock time, so the response
+# time is kept short deliberately.
+RANDOMNESS_SAMPLE_COUNT = 5
+RANDOMNESS_MAX_RESPONSE_TIME = 5  # seconds
+
 # It is possible to test the contents of a PCAP file instead of running 'live'
 # against a device.
 # To do this, filter 1 IGMP query interval from the capture. Meaning: the capture

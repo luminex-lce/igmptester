@@ -157,8 +157,8 @@ def validate_igmpv2_packet_spacing(pcap_file):
                                        f"queries, expected exactly 1"
 
     query_time = membership_query[0]["time"]
-    mrcode = membership_query[0]["mrcode"]
-    max_response_time = mrcode / 10
+    # IGMPv2 has no floating point form, but below 128 the decoding is identical
+    max_response_time = packet.decode_maxrespcode(membership_query[0]["mrcode"])
     return validate_reports(query_time, max_response_time, membership_reports)
 
 
@@ -174,12 +174,5 @@ def validate_igmpv3_packet_spacing(pcap_file):
 
     print("Verify for each membership report that it arrived in time")
     query_time = membership_query[0]["time"]
-    mrcode = membership_query[0]["mrcode"]
-    if mrcode < 128:
-        max_response_time = mrcode / 10
-    else:
-        exp = (mrcode & 0x70) >> 4  # 0x70 = b'0111 0000'
-        mant = mrcode & 0xF  # 0xF = b'0000 1111'
-        # The floating point form yields units of 1/10 second, as the literal form above
-        max_response_time = ((mant | 0x10) << (exp + 3)) / 10
+    max_response_time = packet.decode_maxrespcode(membership_query[0]["mrcode"])
     return validate_reports(query_time, max_response_time, membership_reports)
