@@ -4,7 +4,7 @@
 # - On MacOS, this will be something like "en0". Use `ifconfig` to get a list of the available network interfaces.
 # - On Windows, this will be the name of your ethernet adapter.
 #   Use `ipconfig` to get a list of the available network interfaces.
-IFACE = "eth0"
+IFACE = "Ethernet 3"
 
 # Set this to False if you don't want to run IGMPv3 tests
 # NOTE: devices don't have to implement IGMPv3 to support IGMPv3 membership queries. As outlined in section 2.5 of
