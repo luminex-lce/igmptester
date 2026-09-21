@@ -42,6 +42,11 @@ def validate_igmpv2_reports(
         rcv_gaddr = report['gaddr']
         assert dst == rcv_gaddr, f"Received membership report from {src} where destination " \
                                  f"address {dst} is not equal to the group address {rcv_gaddr}"
+        assert report['ttl'] == 1, f"Received membership report from {src} with IP TTL " \
+                                   f"{report['ttl']}, expected 1. IGMP messages must be sent " \
+                                   f"with a TTL of 1 (RFC 2236 section 2) so that they are not " \
+                                   f"forwarded off the local network. Network equipment may " \
+                                   f"drop reports that get this wrong."
         assert rcv_gaddr not in gaddrs, f"Received duplicate membership report for {rcv_gaddr}"
         gaddrs.append(rcv_gaddr)
         if src in source_ips.keys():
@@ -93,12 +98,16 @@ def validate_igmpv3_reports(pcap_file, gaddr="0.0.0.0"):
 
     found_mgroup_1_join = False
     for report in v2_membership_reports:
+        assert report["ttl"] == 1, f"Received membership report from {report['src']} with IP TTL " \
+                                   f"{report['ttl']}, expected 1 (RFC 2236 section 2)"
         if report["gaddr"] == MGROUP_1:
             found_mgroup_1_join = True
             assert report["gaddr"] == report["dst"], "Membership reports should use the same multicast destination " \
                                                      "address as the address present in the IGMP payload"
     for report in v3_membership_reports:
         assert report["dst"] == "224.0.0.22", "IGMPv3 packets should be addressed to 224.0.0.22"
+        assert report["ttl"] == 1, f"Received IGMPv3 membership report from {report['src']} with " \
+                                   f"IP TTL {report['ttl']}, expected 1 (RFC 3376 section 4)"
         if gaddr != '0.0.0.0':
             assert len(report["records"]) == 1, 'Specific membership reports are expected to have 1 group record'
         for record in report["records"]:
@@ -165,8 +174,11 @@ def validate_igmpv2_packet_spacing(pcap_file):
                                        f"queries, expected exactly 1"
 
     query_time = membership_query[0]["time"]
-    # IGMPv2 has no floating point form, but below 128 the decoding is identical
-    max_response_time = packet.decode_maxrespcode(membership_query[0]["mrcode"])
+    # IGMPv2 always carries Max Response Time as a literal value in units of 1/10
+    # second (RFC 2236 section 2.2). The floating point encoding is IGMPv3 only, so
+    # decode_maxrespcode must not be used here: it would read mrcode 200 as 307.2
+    # seconds instead of 20, and the timing check would accept anything.
+    max_response_time = membership_query[0]["mrcode"] / 10
     return validate_reports(query_time, max_response_time, membership_reports)
 
 

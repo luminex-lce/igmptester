@@ -32,7 +32,11 @@ class IGMPMessageType(Enum):
 
 
 def decode_maxrespcode(mrcode):
-    """Decode a Max Resp Code byte to the maximum response time in seconds.
+    """Decode an IGMPv3 Max Resp Code byte to the maximum response time in seconds.
+
+    This is for IGMPv3 only. IGMPv2 carries the field as a literal value over its
+    whole range (RFC 2236 section 2.2), so decoding a v2 query with this function
+    would inflate every value of 128 and above.
 
     Below 128 the code is a literal value in units of 1/10 second. From 128 up it
     is a floating point value, as specified in RFC 3376 section 4.1.1:
@@ -131,6 +135,7 @@ def get_igmp_v2_packets(capture, type):
                     "dst": ip_data.dst,
                     "gaddr": igmp_data.gaddr,
                     "time": pkt.time,
+                    "ttl": ip_data.ttl,
                     "mrcode": igmp_data.mrcode
                     })
     return packets
@@ -181,6 +186,7 @@ def get_v3_membership_reports(capture):
                 "src": ip_data.src,
                 "dst": ip_data.dst,
                 "time": pkt.time,
+                "ttl": ip_data.ttl,
                 "records": igmp_data.records
                 })
     return packets
