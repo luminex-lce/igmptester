@@ -45,6 +45,11 @@ IGMP_MEMBERSHIP_REPORT_THRESHOLD = 256
 # negligible: measured over 200000 simulated runs of a device picking a uniform
 # random delay, five samples fail about 0.9% of the time and ten samples about
 # 0.004%. Each sample costs the response time plus two seconds in wall clock time.
+# The response time must stay at or below 25 seconds: IGMPv2 carries it in a single
+# byte in units of 1/10 second (RFC 2236 section 2.2), so anything above 25.5 does
+# not fit. It must also stay well above 1.6 seconds, because the check below rejects
+# a variance of 0.2 or less and a device drawing uniformly from 0 to T has a variance
+# of T squared over 12.
 RANDOMNESS_SAMPLE_COUNT = 10
 RANDOMNESS_MAX_RESPONSE_TIME = 5  # seconds
 

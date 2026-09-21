@@ -117,8 +117,9 @@ def send_igmp_v3_membership_query(
     d = IGMPv3mq()
     d.gaddr = gaddr
     # No source addresses are set: a group specific query carries an empty source
-    # list (RFC 3376 section 4.1.8). Listing the group address as a source would
-    # make this a group-and-source specific query for a source that cannot exist.
+    # list (RFC 3376 section 4.1.8). Earlier code assigned srcaddrs here, but it set
+    # the attribute on the IGMPv3 header, which has no such field, so it never
+    # reached the wire and the query already carried an empty list.
     packet = a/b/c/d
     sendp(packet, iface=configuration.IFACE)
 
@@ -162,11 +163,11 @@ def get_v3_membership_queries(capture):
             if igmp_data.type != IGMPMessageType.MEMBERSHIP_QUERY.value:
                 continue
             igmp_mq_data = pkt[IGMPv3mq]
-            assert igmp_data.resv == 0, 'The reserved field should be set to 0'
             packets.append({
                 "src": ip_data.src,
                 "dst": ip_data.dst,
                 "time": pkt.time,
+                "resv": igmp_mq_data.resv,
                 "srcaddrs": igmp_mq_data.srcaddrs,
                 "mrcode": igmp_data.mrcode
                 })
