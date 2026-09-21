@@ -39,15 +39,25 @@ class CapturingProcess(Process):
     def start(self):
         Process.start(self)
         if not self.ready_event.wait(5):
-            if self.exception:
-                _, traceback = self.exception
-                raise (Exception(traceback))
+            # The capture did not come up. Give the child a moment to report why,
+            # then fail regardless: returning here would leave the caller believing
+            # packets are being captured while nothing is listening.
+            reported = self.get_exception(timeout=1)
+            if reported:
+                _, tb = reported
+                raise Exception(f"Capture '{self.filename}' failed to start on interface "
+                                f"{self.interface}:\n{tb}")
+            raise Exception(f"Capture '{self.filename}' did not start within 5 seconds on "
+                            f"interface {self.interface}, and reported no error. Check that the "
+                            f"interface exists, that the directory for the capture file exists "
+                            f"and that this process has permission to capture.")
 
     def stop(self):
         self.ready_event.clear()
         if self.exception:
-            _, traceback = self.exception
-            raise (Exception(traceback))
+            _, tb = self.exception
+            raise Exception(f"Capture '{self.filename}' failed on interface "
+                            f"{self.interface}:\n{tb}")
 
     def run(self):  # noqa: C901
         print("Starting CapturingProcess on interface {} with '{}' as bpf filter and dumping data to {}"
@@ -106,15 +116,47 @@ class CapturingProcess(Process):
         except Exception as e:
             tb = traceback.format_exc()
             self._child_conn.send((e, tb))
+            # Exit non-zero so the parent notices the failure even if it does not
+            # manage to read the traceback off the pipe. Without this the process
+            # exits 0 after a fatal error and the exitcode checks below never fire,
+            # which turns a capture that never started into an empty pcap and a
+            # misleading 'expected at least 1 membership report' further on.
+            sys.exit(1)
 
     @property
     def exception(self):
-        if self._parent_conn.poll():
+        return self.get_exception()
+
+    def get_exception(self, timeout=0):
+        '''
+        Return the (exception, traceback) the capturing process reported, if any.
+
+        Args:
+            timeout: how long to wait for the child to report a failure. The default
+                     of 0 only looks at what has already arrived. Use a short timeout
+                     when a failure is suspected: the child sends the traceback over a
+                     pipe just before it exits, so sampling the pipe at the wrong
+                     instant reports no failure at all and the real diagnostic is lost.
+        '''
+        if self._exception is None and self._parent_conn.poll(timeout):
             self._exception = self._parent_conn.recv()
         return self._exception
 
 
 capture_procs = {}
+
+
+def _reported_failure(capture_proc):
+    '''
+    Return the traceback the capturing process reported, formatted for appending to
+    an error message, or an empty string when it reported nothing. The child sends
+    the traceback just before exiting, so allow a moment for it to arrive.
+    '''
+    reported = capture_proc.get_exception(timeout=1)
+    if not reported:
+        return ''
+    _, tb = reported
+    return f'. The capturing process reported:\n{tb}'
 
 
 def start_capture(interface, filename, **kwargs):
@@ -136,7 +178,17 @@ def start_capture(interface, filename, **kwargs):
     p = CapturingProcess(interface, filename, **kwargs)
 
     capture_procs[filename] = p
-    p.start()
+    try:
+        p.start()
+    except Exception:
+        # A capture that never started must not stay registered, otherwise the next
+        # attempt to capture to this file fails with 'duplicate capture' instead of
+        # the real reason. Make sure the process is not left running either.
+        del capture_procs[filename]
+        if p.is_alive():
+            p.terminate()
+            p.join(8)
+        raise
 
 
 def stop_capture(filename):
@@ -146,18 +198,23 @@ def stop_capture(filename):
         raise Exception('Capture \'{}\'was never started'.format(filename))
 
     t = capture_procs[filename]
-    t.stop()
-    t.join(1)
-    if t.is_alive():
-        print(f"Capturing process {filename} is still alive")
-        t.terminate()
-        t.join(8)  # wait for capture process to terminate
+    # Drop the capture from the registry whatever happens below. Leaving a failed
+    # capture behind makes every later start_capture for the same file fail with
+    # 'Trying to start duplicate capture', so a single genuine failure turns into a
+    # string of unrelated ones in the tests that follow.
+    try:
+        t.stop()
+        t.join(1)
+        if t.is_alive():
+            print(f"Capturing process {filename} is still alive")
+            t.terminate()
+            t.join(8)  # wait for capture process to terminate
 
-    if t.exitcode != 0:
-        raise Exception('Capture \'{}\': process exited abnormally ({})'
-                        .format(filename, t.exitcode))
-
-    del capture_procs[filename]
+        if t.exitcode != 0:
+            raise Exception("Capture '{}': process exited abnormally ({}){}"
+                            .format(filename, t.exitcode, _reported_failure(t)))
+    finally:
+        del capture_procs[filename]
 
 
 def waitfor_capture(filename, timeout=0):
@@ -179,22 +236,24 @@ def waitfor_capture(filename, timeout=0):
 
     t = capture_procs[filename]
 
-    t.join(timeout)
+    # As in stop_capture, the registry entry has to go even when the teardown fails.
+    try:
+        t.join(timeout)
 
-    if t.is_alive():
-        timedout = True
+        if t.is_alive():
+            timedout = True
 
-    t.stop()
-    t.join(1)
+        t.stop()
+        t.join(1)
 
-    if t.is_alive():
-        t.terminate()
-        t.join(8)  # wait for capture process to terminate
+        if t.is_alive():
+            t.terminate()
+            t.join(8)  # wait for capture process to terminate
 
-    if t.exitcode != 0:
-        raise Exception('Capture \'{}\': process exited abnormally ({})'
-                        .format(filename, t.exitcode))
-
-    del capture_procs[filename]
+        if t.exitcode != 0:
+            raise Exception("Capture '{}': process exited abnormally ({}){}"
+                            .format(filename, t.exitcode, _reported_failure(t)))
+    finally:
+        del capture_procs[filename]
 
     return timedout
