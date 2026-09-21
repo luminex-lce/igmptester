@@ -1,4 +1,5 @@
 from multiprocessing import Process, Event, Pipe
+from contextlib import contextmanager
 import signal
 import traceback
 import select
@@ -203,6 +204,37 @@ def start_capture(interface, filename, **kwargs):
         # the real reason. Make sure the process is not left running either.
         _release_capture(filename, p)
         raise
+
+
+@contextmanager
+def capturing(interface, filename, **kwargs):
+    '''
+    Capture for the duration of the with block.
+
+    The capture is stopped whatever happens in the block. Without this, a test that
+    fails between start_capture and stop_capture leaves its capture registered and
+    its process running, and the next capture to the same file fails with 'Trying to
+    start duplicate capture' instead of reporting its own result, so one genuine
+    failure hides the results of the tests after it.
+
+    Args:
+        interface: interface to capture on
+        filename: filename to capture to, this is also used as an identifier
+        **kwargs: options passed to CapturingProcess
+    '''
+    start_capture(interface, filename, **kwargs)
+    try:
+        yield filename
+    except Exception:
+        # The block already failed, so report that rather than anything that goes
+        # wrong while cleaning up: the original failure is what the operator needs.
+        try:
+            stop_capture(filename)
+        except Exception as stop_error:
+            print(f"Stopping capture '{filename}' also failed: {stop_error}")
+        raise
+    else:
+        stop_capture(filename)
 
 
 def stop_capture(filename):

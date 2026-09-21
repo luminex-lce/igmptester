@@ -7,7 +7,7 @@ The tests in this suite can be skipped by configuring the IGMPv3_SUPPORT paramet
 import pytest
 from time import sleep
 import lib.packet as packet
-from lib.capture import start_capture, stop_capture
+from lib.capture import capturing
 from lib.utils import check_interface_up, validate_igmpv3_reports, validate_igmpv3_packet_spacing
 from configuration import (IFACE, MGROUP_1, IGMPV3_SUPPORT,  # noqa: F401
                            RANDOMNESS_SAMPLE_COUNT, RANDOMNESS_MAX_RESPONSE_TIME)
@@ -26,22 +26,18 @@ def validate_membership_reports(
     check_interface_up()
 
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
+    with capturing(IFACE, pcap_file):
+        max_response_time = 1  # seconds
+        mrcode = max_response_time * 10
+        print("Send IGMPv3 membership query")
+        packet.send_igmp_v3_membership_query(
+                source_ip=source_ip,
+                router_alert_option=router_alert_option,
+                mrcode=mrcode,
+                gaddr=gaddr)
 
-    max_response_time = 1  # seconds
-    mrcode = max_response_time * 10
-    print("Send IGMPv3 membership query")
-    packet.send_igmp_v3_membership_query(
-            source_ip=source_ip,
-            router_alert_option=router_alert_option,
-            mrcode=mrcode,
-            gaddr=gaddr)
-
-    print("Wait membership response timeout + a little margin")
-    sleep(max_response_time + 1)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+        print("Wait membership response timeout + a little margin")
+        sleep(max_response_time + 1)
 
     print("Check capture for membership report")
     validate_igmpv3_reports(pcap_file, gaddr)
@@ -63,17 +59,13 @@ def test_v3_is_implemented():
 
     pcap_file = "output/v3_is_implemented.pcap"
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
+    with capturing(IFACE, pcap_file):
+        max_response_time = 1  # seconds
+        print("Send IGMPv3 membership query")
+        packet.send_igmp_v3_membership_query(mrcode=max_response_time * 10)
 
-    max_response_time = 1  # seconds
-    print("Send IGMPv3 membership query")
-    packet.send_igmp_v3_membership_query(mrcode=max_response_time * 10)
-
-    print("Wait membership response timeout + a little margin")
-    sleep(max_response_time + 1)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+        print("Wait membership response timeout + a little margin")
+        sleep(max_response_time + 1)
 
     v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
     v3_membership_reports = packet.get_v3_membership_reports(pcap_file)
@@ -159,26 +151,22 @@ def test_maximum_response_time():
     for max_response_time in max_response_times:
         pcap_file = f"output/v3_maximum_response_time_{max_response_time}_sec.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
-        start_capture(IFACE, pcap_file)
+        with capturing(IFACE, pcap_file):
+            mrcode = max_response_time * 10
+            # The Max Resp Code field is a single byte, so a large mrcode is quantised to
+            # the nearest representable value when it is encoded. Wait for, and validate
+            # against, the window the query actually carries rather than the one asked
+            # for: mrcode 3000 transmits 294.4 seconds, not 300.
+            encoded_response_time = packet.encoded_max_response_time(mrcode)
+            if encoded_response_time != max_response_time:
+                print(f"Requested {max_response_time} seconds, query actually carries "
+                      f"{encoded_response_time} seconds")
 
-        mrcode = max_response_time * 10
-        # The Max Resp Code field is a single byte, so a large mrcode is quantised to
-        # the nearest representable value when it is encoded. Wait for, and validate
-        # against, the window the query actually carries rather than the one asked
-        # for: mrcode 3000 transmits 294.4 seconds, not 300.
-        encoded_response_time = packet.encoded_max_response_time(mrcode)
-        if encoded_response_time != max_response_time:
-            print(f"Requested {max_response_time} seconds, query actually carries "
-                  f"{encoded_response_time} seconds")
+            print("Send IGMPv3 membership query")
+            packet.send_igmp_v3_membership_query(mrcode=mrcode)
 
-        print("Send IGMPv3 membership query")
-        packet.send_igmp_v3_membership_query(mrcode=mrcode)
-
-        print("Wait for the maximum response time")
-        sleep(encoded_response_time + 2)
-
-        print("Stop capture")
-        stop_capture(pcap_file)
+            print("Wait for the maximum response time")
+            sleep(encoded_response_time + 2)
 
         validate_igmpv3_packet_spacing(pcap_file)
 
@@ -192,16 +180,12 @@ def test_maximum_response_time():
     for attempt in range(RANDOMNESS_SAMPLE_COUNT):
         pcap_file = f"output/v3_maximum_response_time_randomness_{attempt}.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
-        start_capture(IFACE, pcap_file)
+        with capturing(IFACE, pcap_file):
+            print("Send IGMPv3 membership query")
+            packet.send_igmp_v3_membership_query(mrcode=repeated_response_time * 10)
 
-        print("Send IGMPv3 membership query")
-        packet.send_igmp_v3_membership_query(mrcode=repeated_response_time * 10)
-
-        print("Wait for the maximum response time")
-        sleep(repeated_response_time + 2)
-
-        print("Stop capture")
-        stop_capture(pcap_file)
+            print("Wait for the maximum response time")
+            sleep(repeated_response_time + 2)
 
         response_times.append(validate_igmpv3_packet_spacing(pcap_file))
 

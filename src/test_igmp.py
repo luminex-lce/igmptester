@@ -4,7 +4,7 @@ of devices that want to receive multicast data.
 """
 from time import sleep
 import lib.packet as packet
-from lib.capture import start_capture, stop_capture
+from lib.capture import capturing
 from lib.utils import check_interface_up, validate_igmpv2_reports, validate_igmpv2_packet_spacing
 from configuration import IFACE, MGROUP_1, RANDOMNESS_SAMPLE_COUNT, RANDOMNESS_MAX_RESPONSE_TIME
 
@@ -22,22 +22,18 @@ def validate_membership_reports(
     check_interface_up()
 
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
+    with capturing(IFACE, pcap_file):
+        max_response_time = 1  # seconds
+        mrcode = max_response_time * 10
+        print("Send IGMPv2 membership query")
+        packet.send_igmp_v2_membership_query(
+                source_ip=source_ip,
+                router_alert_option=router_alert_option,
+                mrcode=mrcode,
+                gaddr=gaddr)
 
-    max_response_time = 1  # seconds
-    mrcode = max_response_time * 10
-    print("Send IGMPv2 membership query")
-    packet.send_igmp_v2_membership_query(
-            source_ip=source_ip,
-            router_alert_option=router_alert_option,
-            mrcode=mrcode,
-            gaddr=gaddr)
-
-    print("Wait membership response timeout + a little margin")
-    sleep(max_response_time + 1)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+        print("Wait membership response timeout + a little margin")
+        sleep(max_response_time + 1)
 
     validate_igmpv2_reports(pcap_file, gaddr)
 
@@ -116,13 +112,9 @@ def test_unsolicited_membership_reports():
 
     pcap_file = "output/unsolicited_membership_reports.pcap"
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
-
-    print("Wait default query interval + a little margin")
-    sleep(125 + 5)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+    with capturing(IFACE, pcap_file):
+        print("Wait default query interval + a little margin")
+        sleep(125 + 5)
 
     print("Check capture for V2 membership report")
     v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
@@ -155,17 +147,13 @@ def test_maximum_response_time():
     for response_time in max_response_times:
         pcap_file = f"output/maximum_response_time_{response_time}_sec.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
-        start_capture(IFACE, pcap_file)
+        with capturing(IFACE, pcap_file):
+            mrcode = response_time * 10
+            print("Send IGMPv2 membership query")
+            packet.send_igmp_v2_membership_query(mrcode=mrcode)
 
-        mrcode = response_time * 10
-        print("Send IGMPv2 membership query")
-        packet.send_igmp_v2_membership_query(mrcode=mrcode)
-
-        print("Wait for the maximum response time")
-        sleep(response_time + 2)
-
-        print("Stop capture")
-        stop_capture(pcap_file)
+            print("Wait for the maximum response time")
+            sleep(response_time + 2)
 
         validate_igmpv2_packet_spacing(pcap_file)
 
@@ -179,16 +167,12 @@ def test_maximum_response_time():
     for attempt in range(RANDOMNESS_SAMPLE_COUNT):
         pcap_file = f"output/maximum_response_time_randomness_{attempt}.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
-        start_capture(IFACE, pcap_file)
+        with capturing(IFACE, pcap_file):
+            print("Send IGMPv2 membership query")
+            packet.send_igmp_v2_membership_query(mrcode=repeated_response_time * 10)
 
-        print("Send IGMPv2 membership query")
-        packet.send_igmp_v2_membership_query(mrcode=repeated_response_time * 10)
-
-        print("Wait for the maximum response time")
-        sleep(repeated_response_time + 2)
-
-        print("Stop capture")
-        stop_capture(pcap_file)
+            print("Wait for the maximum response time")
+            sleep(repeated_response_time + 2)
 
         response_times.append(validate_igmpv2_packet_spacing(pcap_file))
 
