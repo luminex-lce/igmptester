@@ -5,10 +5,10 @@ from scapy.packet import bind_bottom_up, split_bottom_up
 from scapy.sendrecv import sendp
 from scapy.contrib.igmp import IGMP
 from scapy.contrib.igmpv3 import IGMPv3, IGMPv3mr, IGMPv3mq
+from scapy.arch import get_if_hwaddr
 
 from enum import Enum
 import configuration
-import psutil
 
 # By default scapy only dissects IP payloads as IGMP when ttl == 1, because that
 # is what a conformant implementation sends (RFC 2236 section 2). A DUT that gets
@@ -56,15 +56,10 @@ def decode_maxrespcode(mrcode):
 def get_interface_mac():
     """Get the MAC address of the configured interface."""
     try:
-        interface_stats = psutil.net_if_addrs().get(configuration.IFACE)
-        if interface_stats:
-            for addr in interface_stats:
-                # family 17 is AF_LINK (MAC address)
-                if addr.family == 17:
-                    return addr.address.lower()
+        mac = get_if_hwaddr(configuration.IFACE)
+        return mac.lower()
     except Exception:
-        pass
-    return None
+        return None
 
 
 def encoded_max_response_time(mrcode):
@@ -142,6 +137,9 @@ def send_igmp_v3_membership_query(
 def get_igmp_v2_packets(capture, type):
     packets = []
     iface_mac = get_interface_mac()
+    if iface_mac:
+        print(f"Interface {configuration.IFACE} has MAC address {iface_mac}, "
+              f"ignoring packets from this address in the capture")
     for pkt in scapy.utils.PcapReader(capture):
         if pkt.haslayer(IGMP):
             # Skip packets from the interface itself
@@ -199,6 +197,9 @@ def get_v3_membership_queries(capture):
 def get_v3_membership_reports(capture):
     packets = []
     iface_mac = get_interface_mac()
+    if iface_mac:
+        print(f"Interface {configuration.IFACE} has MAC address {iface_mac}, "
+              f"ignoring packets from this address in the capture")
     for pkt in scapy.utils.PcapReader(capture):
         if pkt.haslayer(IGMPv3) and pkt.haslayer(IGMPv3mr):
             # Skip packets from the interface itself
