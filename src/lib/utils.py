@@ -15,10 +15,11 @@ def check_interface_up(expected=True):
     # to the test computer with no DHCP server, so a perfectly good link often has no
     # address at all, while a statically configured interface keeps its address after
     # the cable is unplugged.
-    interface_stats = psutil.net_if_stats().get(IFACE)
+    all_stats = psutil.net_if_stats()
+    interface_stats = all_stats.get(IFACE)
     assert interface_stats is not None, \
         f'Interface {IFACE} does not exist. Set IFACE in configuration.py to one of: ' \
-        f'{sorted(psutil.net_if_stats().keys())}'
+        f'{sorted(all_stats.keys())}'
     up = interface_stats.isup
     assert up == expected, f'Interface {IFACE} is not in the expected link state ' \
                            f'(expected up = {expected}, actual up = {up})'
