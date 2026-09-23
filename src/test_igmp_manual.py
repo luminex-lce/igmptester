@@ -6,7 +6,7 @@ configuration
 import pytest
 from time import sleep
 import lib.packet as packet
-from lib.capture import start_capture, stop_capture
+from lib.capture import capturing
 from lib.utils import check_interface_up
 from configuration import IFACE, MGROUP_1, MGROUP_2, SKIP_MANUAL  # noqa: F401
 
@@ -36,24 +36,20 @@ def test_report_on_link(user_input):
     pcap_file = "output/report_on_link.pcap"
 
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
+    with capturing(IFACE, pcap_file):
+        print(f"Toggle link on interface {IFACE}")
 
-    print(f"Toggle link on interface {IFACE}")
+        with user_input:
+            input('\nDisconnect the network cable between the DUT and the test computer. Afterwards press enter')
 
-    with user_input:
-        input('\nDisconnect the network cable between the DUT and the test computer. Afterwards press enter')
+        sleep(3)
+        check_interface_up(expected=False)
 
-    sleep(3)
-    check_interface_up(expected=False)
+        with user_input:
+            input('\nReconnect the network cable between the DUT and the test computer. Afterwards press enter')
 
-    with user_input:
-        input('\nReconnect the network cable between the DUT and the test computer. Afterwards press enter')
-
-    sleep(3)
-    check_interface_up()
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+        sleep(3)
+        check_interface_up()
 
     v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
     v3_membership_reports = packet.get_v3_membership_reports(pcap_file)
@@ -90,21 +86,17 @@ def test_leave_on_config_change(user_input):
     check_interface_up()
 
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
+    with capturing(IFACE, pcap_file):
+        print('Send v2 Query in an attempt to force v2 operation of DUT')
+        packet.send_igmp_v2_membership_query()
 
-    print('Send v2 Query in an attempt to force v2 operation of DUT')
-    packet.send_igmp_v2_membership_query()
+        sleep(1)
 
-    sleep(1)
+        with user_input:
+            input(f'\nChange the configuration of the DUT to no longer accept {MGROUP_1}, '
+                  f'but receive {MGROUP_2} instead. Afterwards press enter')
 
-    with user_input:
-        input(f'\nChange the configuration of the DUT to no longer accept {MGROUP_1}, '
-              f'but receive {MGROUP_2} instead. Afterwards press enter')
-
-    sleep(1)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+        sleep(1)
 
     membership_reports = packet.get_v2_membership_reports(pcap_file)
     leaves = packet.get_v2_leaves(pcap_file)
@@ -151,18 +143,14 @@ def test_report_on_boot(user_input):
     sleep(0.5)
 
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
+    with capturing(IFACE, pcap_file):
+        with user_input:
+            input('\nStartup the DUT. Press enter when the DUT is fully booted up.')
 
-    with user_input:
-        input('\nStartup the DUT. Press enter when the DUT is fully booted up.')
+        print(f"Detect link up on interface {IFACE}")
+        check_interface_up()
 
-    print(f"Detect link up on interface {IFACE}")
-    check_interface_up()
-
-    sleep(1)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+        sleep(1)
 
     v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
     v3_membership_reports = packet.get_v3_membership_reports(pcap_file)

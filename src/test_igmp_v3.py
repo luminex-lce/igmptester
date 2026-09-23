@@ -7,9 +7,10 @@ The tests in this suite can be skipped by configuring the IGMPv3_SUPPORT paramet
 import pytest
 from time import sleep
 import lib.packet as packet
-from lib.capture import start_capture, stop_capture
+from lib.capture import capturing
 from lib.utils import check_interface_up, validate_igmpv3_reports, validate_igmpv3_packet_spacing
-from configuration import IFACE, MGROUP_1, IGMPV3_SUPPORT  # noqa: F401
+from configuration import (IFACE, MGROUP_1, IGMPV3_SUPPORT,  # noqa: F401
+                           RANDOMNESS_SAMPLE_COUNT, RANDOMNESS_MAX_RESPONSE_TIME)
 
 
 def validate_membership_reports(
@@ -25,25 +26,64 @@ def validate_membership_reports(
     check_interface_up()
 
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
+    with capturing(IFACE, pcap_file):
+        max_response_time = 1  # seconds
+        mrcode = max_response_time * 10
+        print("Send IGMPv3 membership query")
+        packet.send_igmp_v3_membership_query(
+                source_ip=source_ip,
+                router_alert_option=router_alert_option,
+                mrcode=mrcode,
+                gaddr=gaddr)
 
-    max_response_time = 1  # seconds
-    mrcode = max_response_time * 10
-    print("Send IGMPv3 membership query")
-    packet.send_igmp_v3_membership_query(
-            source_ip=source_ip,
-            router_alert_option=router_alert_option,
-            mrcode=mrcode,
-            gaddr=gaddr)
-
-    print("Wait membership response timeout + a little margin")
-    sleep(max_response_time + 1)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+        print("Wait membership response timeout + a little margin")
+        sleep(max_response_time + 1)
 
     print("Check capture for membership report")
     validate_igmpv3_reports(pcap_file, gaddr)
+
+
+@pytest.mark.skipif("not IGMPV3_SUPPORT")
+def test_v3_is_implemented():
+    """Verify that the device actually implements IGMPv3 and does not only fall back to IGMPv2
+    A device is allowed to answer an IGMPv3 query with an IGMPv2 membership report: that is the
+    backwards compatible mode described in section 7.3.2 of RFC 3376 and it interoperates fine.
+    It does mean the device does not implement IGMPv3 though, and the remaining tests in this
+    suite cannot tell you anything about its IGMPv3 behavior, so this is reported as a failure to
+    make it visible rather than letting the rest of the suite pass on IGMPv2 evidence.
+    If this is the only failing test in this suite, read it as a warning: the device works, but it
+    does not speak IGMPv3. Set IGMPV3_SUPPORT to False in the configuration to skip this suite.
+    """
+    print(f"Detect link up on interface {IFACE}")
+    check_interface_up()
+
+    pcap_file = "output/v3_is_implemented.pcap"
+    print(f"Start capture on interface {IFACE} to file {pcap_file}")
+    with capturing(IFACE, pcap_file):
+        max_response_time = 1  # seconds
+        print("Send IGMPv3 membership query")
+        packet.send_igmp_v3_membership_query(mrcode=max_response_time * 10)
+
+        print("Wait membership response timeout + a little margin")
+        sleep(max_response_time + 1)
+
+    v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
+    v3_membership_reports = packet.get_v3_membership_reports(pcap_file)
+    print(v2_membership_reports)
+    print(v3_membership_reports)
+
+    assert len(v2_membership_reports) > 0 or len(v3_membership_reports) > 0, \
+        "Received no membership reports at all in response to an IGMPv3 general query. " \
+        "The device does not appear to respond to IGMPv3 queries."
+
+    assert len(v3_membership_reports) > 0, \
+        f"The device answered an IGMPv3 general query with {len(v2_membership_reports)} IGMPv2 " \
+        f"membership report(s) and no IGMPv3 membership reports. This is the IGMPv2 backwards " \
+        f"compatible mode of section 7.3.2 of RFC 3376. It is acceptable and the device will " \
+        f"work on an IGMPv3 network, so treat this failure as a warning rather than a defect: " \
+        f"it means the device does not implement IGMPv3. Note that the other tests in this " \
+        f"suite accept IGMPv2 reports as evidence, so they cannot confirm any IGMPv3 behavior " \
+        f"for this device. Set IGMPV3_SUPPORT to False in the configuration to skip this suite."
 
 
 @pytest.mark.skipif("not IGMPV3_SUPPORT")
@@ -98,33 +138,60 @@ def test_maximum_response_time():
 
     Note that in IGMPv3, the maximum response time has an exponential range as described in section 4.1.1 of RFC 3376.
     If the value of the max resp code is above 128 (12.8 seconds), it represents a floating point value.
+    Because that encoding is lossy, the test validates against the response time the query actually
+    carries rather than the one that was requested.
+    The randomness of the response time is measured separately, over repeated queries that all carry
+    the same maximum response time.
     """
     from statistics import variance
     print(f"Detect link up on interface {IFACE}")
     check_interface_up()
 
     max_response_times = [1, 3, 5, 10, 20, 300]
-    response_times = []
     for max_response_time in max_response_times:
         pcap_file = f"output/v3_maximum_response_time_{max_response_time}_sec.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
-        start_capture(IFACE, pcap_file)
+        with capturing(IFACE, pcap_file):
+            mrcode = max_response_time * 10
+            # The Max Resp Code field is a single byte, so a large mrcode is quantised to
+            # the nearest representable value when it is encoded. Wait for, and validate
+            # against, the window the query actually carries rather than the one asked
+            # for: mrcode 3000 transmits 294.4 seconds, not 300.
+            encoded_response_time = packet.encoded_max_response_time(mrcode)
+            if encoded_response_time != max_response_time:
+                print(f"Requested {max_response_time} seconds, query actually carries "
+                      f"{encoded_response_time} seconds")
 
-        mrcode = max_response_time * 10
-        print("Send IGMPv3 membership query")
-        packet.send_igmp_v3_membership_query(mrcode=mrcode)
+            print("Send IGMPv3 membership query")
+            packet.send_igmp_v3_membership_query(mrcode=mrcode)
 
-        print("Wait for the maximum response time")
-        sleep(max_response_time + 2)
+            print("Wait for the maximum response time")
+            sleep(encoded_response_time + 2)
 
-        print("Stop capture")
-        stop_capture(pcap_file)
+        validate_igmpv3_packet_spacing(pcap_file)
+
+    # Verify that the DUT picks a random delay rather than always answering after a
+    # fixed part of the window. This has to be measured over repeated queries with
+    # the SAME maximum response time: pooling the responses to queries with
+    # different maximums measures the spread of the maximums we chose ourselves, so
+    # even a DUT that always answers at exactly the maximum would look random.
+    repeated_response_time = RANDOMNESS_MAX_RESPONSE_TIME
+    response_times = []
+    for attempt in range(RANDOMNESS_SAMPLE_COUNT):
+        pcap_file = f"output/v3_maximum_response_time_randomness_{attempt}.pcap"
+        print(f"Start capture on interface {IFACE} to file {pcap_file}")
+        with capturing(IFACE, pcap_file):
+            print("Send IGMPv3 membership query")
+            packet.send_igmp_v3_membership_query(mrcode=repeated_response_time * 10)
+
+            print("Wait for the maximum response time")
+            sleep(repeated_response_time + 2)
 
         response_times.append(validate_igmpv3_packet_spacing(pcap_file))
 
     var = variance(response_times)
     print(response_times)
-    assert var > 0.2, f"It looks like the membership response times aren't randomly distributed " \
-                      f"Variance is {var}"
-
-    assert True
+    assert var > 0.2, f"It looks like the membership response times aren't randomly distributed. " \
+                      f"Response times to {RANDOMNESS_SAMPLE_COUNT} queries with the same maximum " \
+                      f"response time of {repeated_response_time} seconds were {response_times}, " \
+                      f"variance is {var}"

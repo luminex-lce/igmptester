@@ -4,9 +4,9 @@ of devices that want to receive multicast data.
 """
 from time import sleep
 import lib.packet as packet
-from lib.capture import start_capture, stop_capture
+from lib.capture import capturing
 from lib.utils import check_interface_up, validate_igmpv2_reports, validate_igmpv2_packet_spacing
-from configuration import IFACE, MGROUP_1
+from configuration import IFACE, MGROUP_1, RANDOMNESS_SAMPLE_COUNT, RANDOMNESS_MAX_RESPONSE_TIME
 
 
 def validate_membership_reports(
@@ -22,22 +22,18 @@ def validate_membership_reports(
     check_interface_up()
 
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
+    with capturing(IFACE, pcap_file):
+        max_response_time = 1  # seconds
+        mrcode = max_response_time * 10
+        print("Send IGMPv2 membership query")
+        packet.send_igmp_v2_membership_query(
+                source_ip=source_ip,
+                router_alert_option=router_alert_option,
+                mrcode=mrcode,
+                gaddr=gaddr)
 
-    max_response_time = 1  # seconds
-    mrcode = max_response_time * 10
-    print("Send IGMPv2 membership query")
-    packet.send_igmp_v2_membership_query(
-            source_ip=source_ip,
-            router_alert_option=router_alert_option,
-            mrcode=mrcode,
-            gaddr=gaddr)
-
-    print("Wait membership response timeout + a little margin")
-    sleep(max_response_time + 1)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+        print("Wait membership response timeout + a little margin")
+        sleep(max_response_time + 1)
 
     validate_igmpv2_reports(pcap_file, gaddr)
 
@@ -116,13 +112,9 @@ def test_unsolicited_membership_reports():
 
     pcap_file = "output/unsolicited_membership_reports.pcap"
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
-    start_capture(IFACE, pcap_file)
-
-    print("Wait default query interval + a little margin")
-    sleep(125 + 5)
-
-    print("Stop capture")
-    stop_capture(pcap_file)
+    with capturing(IFACE, pcap_file):
+        print("Wait default query interval + a little margin")
+        sleep(125 + 5)
 
     print("Check capture for V2 membership report")
     v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
@@ -152,27 +144,41 @@ def test_maximum_response_time():
     check_interface_up()
 
     max_response_times = [1, 3, 5, 10, 20]
-    response_times = []
     for response_time in max_response_times:
         pcap_file = f"output/maximum_response_time_{response_time}_sec.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
-        start_capture(IFACE, pcap_file)
+        with capturing(IFACE, pcap_file):
+            mrcode = response_time * 10
+            print("Send IGMPv2 membership query")
+            packet.send_igmp_v2_membership_query(mrcode=mrcode)
 
-        mrcode = response_time * 10
-        print("Send IGMPv2 membership query")
-        packet.send_igmp_v2_membership_query(mrcode=mrcode)
+            print("Wait for the maximum response time")
+            sleep(response_time + 2)
 
-        print("Wait for the maximum response time")
-        sleep(response_time + 2)
+        validate_igmpv2_packet_spacing(pcap_file)
 
-        print("Stop capture")
-        stop_capture(pcap_file)
+    # Verify that the DUT picks a random delay rather than always answering after a
+    # fixed part of the window. This has to be measured over repeated queries with
+    # the SAME maximum response time: pooling the responses to queries with
+    # different maximums measures the spread of the maximums we chose ourselves, so
+    # even a DUT that always answers at exactly the maximum would look random.
+    repeated_response_time = RANDOMNESS_MAX_RESPONSE_TIME
+    response_times = []
+    for attempt in range(RANDOMNESS_SAMPLE_COUNT):
+        pcap_file = f"output/maximum_response_time_randomness_{attempt}.pcap"
+        print(f"Start capture on interface {IFACE} to file {pcap_file}")
+        with capturing(IFACE, pcap_file):
+            print("Send IGMPv2 membership query")
+            packet.send_igmp_v2_membership_query(mrcode=repeated_response_time * 10)
+
+            print("Wait for the maximum response time")
+            sleep(repeated_response_time + 2)
 
         response_times.append(validate_igmpv2_packet_spacing(pcap_file))
 
     var = variance(response_times)
     print(response_times)
-    assert var > 0.2, f"It looks like the membership response times aren't randomly distributed " \
-                      f"Variance is {var}"
-
-    assert True
+    assert var > 0.2, f"It looks like the membership response times aren't randomly distributed. " \
+                      f"Response times to {RANDOMNESS_SAMPLE_COUNT} queries with the same maximum " \
+                      f"response time of {repeated_response_time} seconds were {response_times}, " \
+                      f"variance is {var}"

@@ -4,7 +4,7 @@
 # - On MacOS, this will be something like "en0". Use `ifconfig` to get a list of the available network interfaces.
 # - On Windows, this will be the name of your ethernet adapter.
 #   Use `ipconfig` to get a list of the available network interfaces.
-IFACE = "eth0"
+IFACE = "Ethernet 3"
 
 # Set this to False if you don't want to run IGMPv3 tests
 # NOTE: devices don't have to implement IGMPv3 to support IGMPv3 membership queries. As outlined in section 2.5 of
@@ -34,6 +34,24 @@ MGROUP_2 = "239.255.0.2"  # sACN universe 2
 # registrations are handled. Therefore it is recommended that end devices stay well below
 # such a limit with the number of multicast addresses they would like to register
 IGMP_MEMBERSHIP_REPORT_THRESHOLD = 256
+
+# A DUT has to delay each membership report by a random time between zero and the
+# maximum response time of the query. To check that, the suite sends several queries
+# that all carry the SAME maximum response time and looks at the spread of the
+# replies. These two settings control that check. More samples make it more reliable
+# but each one costs roughly the response time in wall clock time, so the response
+# time is kept short deliberately.
+# Ten samples keep the chance of failing a device that does randomise correctly
+# negligible: measured over 200000 simulated runs of a device picking a uniform
+# random delay, five samples fail about 0.9% of the time and ten samples about
+# 0.004%. Each sample costs the response time plus two seconds in wall clock time.
+# The response time must stay at or below 25 seconds: IGMPv2 carries it in a single
+# byte in units of 1/10 second (RFC 2236 section 2.2), so anything above 25.5 does
+# not fit. It must also stay well above 1.6 seconds, because the check below rejects
+# a variance of 0.2 or less and a device drawing uniformly from 0 to T has a variance
+# of T squared over 12.
+RANDOMNESS_SAMPLE_COUNT = 10
+RANDOMNESS_MAX_RESPONSE_TIME = 5  # seconds
 
 # It is possible to test the contents of a PCAP file instead of running 'live'
 # against a device.

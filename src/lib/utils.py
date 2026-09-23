@@ -1,7 +1,6 @@
 from configuration import IFACE, MGROUP_1, IGMP_MEMBERSHIP_REPORT_THRESHOLD
 import lib.packet as packet
 import psutil
-import socket
 import os
 import warnings
 from statistics import median
@@ -11,9 +10,19 @@ def check_interface_up(expected=True):
     if os.environ.get('RUNNING_IN_DOCKER', False):
         # When running inside a Docker container, the interface is always up.
         return
-    interface_addrs = psutil.net_if_addrs().get(IFACE) or []
-    up = socket.AF_INET in [snicaddr.family for snicaddr in interface_addrs]
-    assert up == expected, f'Interface {IFACE} is not in the expected link state (up = {expected})'
+    # Use the link state reported by the driver rather than the presence of an IPv4
+    # address. The two are different properties: the DUT is normally cabled directly
+    # to the test computer with no DHCP server, so a perfectly good link often has no
+    # address at all, while a statically configured interface keeps its address after
+    # the cable is unplugged.
+    all_stats = psutil.net_if_stats()
+    interface_stats = all_stats.get(IFACE)
+    assert interface_stats is not None, \
+        f'Interface {IFACE} does not exist. Set IFACE in configuration.py to one of: ' \
+        f'{sorted(all_stats.keys())}'
+    up = interface_stats.isup
+    assert up == expected, f'Interface {IFACE} is not in the expected link state ' \
+                           f'(expected up = {expected}, actual up = {up})'
 
 
 def validate_igmpv2_reports(
@@ -34,6 +43,11 @@ def validate_igmpv2_reports(
         rcv_gaddr = report['gaddr']
         assert dst == rcv_gaddr, f"Received membership report from {src} where destination " \
                                  f"address {dst} is not equal to the group address {rcv_gaddr}"
+        assert report['ttl'] == 1, f"Received membership report from {src} with IP TTL " \
+                                   f"{report['ttl']}, expected 1. IGMP messages must be sent " \
+                                   f"with a TTL of 1 (RFC 2236 section 2) so that they are not " \
+                                   f"forwarded off the local network. Network equipment may " \
+                                   f"drop reports that get this wrong."
         assert rcv_gaddr not in gaddrs, f"Received duplicate membership report for {rcv_gaddr}"
         gaddrs.append(rcv_gaddr)
         if src in source_ips.keys():
@@ -85,12 +99,16 @@ def validate_igmpv3_reports(pcap_file, gaddr="0.0.0.0"):
 
     found_mgroup_1_join = False
     for report in v2_membership_reports:
+        assert report["ttl"] == 1, f"Received membership report from {report['src']} with IP TTL " \
+                                   f"{report['ttl']}, expected 1 (RFC 2236 section 2)"
         if report["gaddr"] == MGROUP_1:
             found_mgroup_1_join = True
             assert report["gaddr"] == report["dst"], "Membership reports should use the same multicast destination " \
                                                      "address as the address present in the IGMP payload"
     for report in v3_membership_reports:
         assert report["dst"] == "224.0.0.22", "IGMPv3 packets should be addressed to 224.0.0.22"
+        assert report["ttl"] == 1, f"Received IGMPv3 membership report from {report['src']} with " \
+                                   f"IP TTL {report['ttl']}, expected 1 (RFC 3376 section 4)"
         if gaddr != '0.0.0.0':
             assert len(report["records"]) == 1, 'Specific membership reports are expected to have 1 group record'
         for record in report["records"]:
@@ -153,12 +171,15 @@ def validate_igmpv2_packet_spacing(pcap_file):
     print("Get membership query timestamp")
     membership_query = packet.get_v2_membership_queries(pcap_file)
     print(membership_query)
-    assert len(membership_query) == 1, f"Found {len(membership_reports)} IGMPv2 membership " \
+    assert len(membership_query) == 1, f"Found {len(membership_query)} IGMPv2 membership " \
                                        f"queries, expected exactly 1"
 
     query_time = membership_query[0]["time"]
-    mrcode = membership_query[0]["mrcode"]
-    max_response_time = mrcode / 10
+    # IGMPv2 always carries Max Response Time as a literal value in units of 1/10
+    # second (RFC 2236 section 2.2). The floating point encoding is IGMPv3 only, so
+    # decode_maxrespcode must not be used here: it would read mrcode 200 as 307.2
+    # seconds instead of 20, and the timing check would accept anything.
+    max_response_time = membership_query[0]["mrcode"] / 10
     return validate_reports(query_time, max_response_time, membership_reports)
 
 
@@ -169,16 +190,10 @@ def validate_igmpv3_packet_spacing(pcap_file):
     print("Get membership query timestamp")
     membership_query = packet.get_v3_membership_queries(pcap_file)
     print(membership_query)
-    assert len(membership_query) == 1, f"Found {len(membership_reports)} IGMPv3 membership " \
+    assert len(membership_query) == 1, f"Found {len(membership_query)} IGMPv3 membership " \
                                        f"queries, expected exactly 1"
 
     print("Verify for each membership report that it arrived in time")
     query_time = membership_query[0]["time"]
-    mrcode = membership_query[0]["mrcode"]
-    if mrcode < 128:
-        max_response_time = mrcode / 10
-    else:
-        exp = (mrcode & 0x70) > 4  # 0x70 = b'0111 0000'
-        mant = mrcode & 0xF  # 0xF = b'0000 1111'
-        max_response_time = (mant | 0x10) << (exp + 3)
+    max_response_time = packet.decode_maxrespcode(membership_query[0]["mrcode"])
     return validate_reports(query_time, max_response_time, membership_reports)
