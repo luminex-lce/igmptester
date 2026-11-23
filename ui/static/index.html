@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IGMP Tester</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◎</span>
+      <div>
+        <h1>IGMP Tester</h1>
+        <p class="tagline">Validate the IGMP behaviour of multicast receivers</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="run" role="tab">Test run</button>
+      <button class="tab" data-view="config" role="tab">Configuration</button>
+    </nav>
+    <div id="iface-chip" class="iface-chip" title="Interface configured in configuration.py"></div>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <!-- ================================================================ RUN VIEW -->
+  <main id="view-run" class="view">
+    <aside class="sidebar">
+      <section class="card">
+        <div class="card-head">
+          <h2>Tests</h2>
+          <div class="head-actions">
+            <button class="link-btn" id="sel-all">All</button>
+            <button class="link-btn" id="sel-none">None</button>
+            <button class="icon-btn" id="refresh-tests" title="Reload test list">⟳</button>
+          </div>
+        </div>
+        <div id="test-tree" class="test-tree"><p class="muted">Loading tests…</p></div>
+        <div class="start-row">
+          <button id="start-btn" class="btn primary" disabled>▶ Start test</button>
+          <span id="sel-count" class="muted small"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Previous runs</h2>
+          <button class="link-btn" id="open-output">Open output folder</button>
+        </div>
+        <ul id="history" class="history"><li class="muted">No runs yet</li></ul>
+      </section>
+    </aside>
+
+    <section class="content">
+      <div id="empty-state" class="card empty">
+        <h2>Ready to test</h2>
+        <ol>
+          <li>Close any program that might use IGMP on this computer (for example sACNViewer).</li>
+          <li>Connect the device under test <strong>directly</strong> to the configured interface, with no switch in between.</li>
+          <li>Check the settings in the <a href="#" data-goto="config">Configuration</a> tab.</li>
+          <li>Pick the tests on the left and press <strong>Start test</strong>.</li>
+        </ol>
+      </div>
+
+      <div id="run-panel" class="hidden">
+        <section class="card run-head">
+          <div class="run-title">
+            <div>
+              <span id="run-status" class="status-pill"></span>
+              <h2 id="run-name"></h2>
+            </div>
+            <div class="run-actions">
+              <button id="stop-btn" class="btn danger hidden">■ Stop</button>
+              <button id="open-run-dir" class="btn">📂 Open output folder</button>
+            </div>
+          </div>
+          <div class="progress"><div id="progress-bar" class="progress-bar"></div></div>
+          <div class="run-meta">
+            <span id="progress-text"></span>
+            <span id="elapsed"></span>
+          </div>
+          <div id="current-test" class="current-test hidden"></div>
+          <div id="counts" class="counts"></div>
+          <div id="run-links" class="run-links"></div>
+          <pre id="collect-errors" class="error-box hidden"></pre>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Results</h2>
+            <label class="small muted"><input type="checkbox" id="only-problems"> Only show failures</label>
+          </div>
+          <div id="results" class="results"></div>
+        </section>
+
+        <section class="card" id="console-card">
+          <div class="card-head">
+            <h2>Console</h2>
+            <label class="small muted"><input type="checkbox" id="autoscroll" checked> Auto-scroll</label>
+          </div>
+          <pre id="console" class="console"></pre>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================================================================ CONFIG VIEW -->
+  <main id="view-config" class="view hidden">
+    <section class="content wide">
+      <div class="card config-head">
+        <div>
+          <h2>Configuration</h2>
+          <p class="muted small">Edits <code id="config-path"></code>. Comments in the file are kept. Changes apply to the next test run.</p>
+        </div>
+        <div class="run-actions">
+          <span id="config-dirty" class="muted small hidden">Unsaved changes</span>
+          <button id="config-revert" class="btn" disabled>Revert</button>
+          <button id="config-save" class="btn primary" disabled>Save</button>
+        </div>
+      </div>
+      <div id="config-form" class="config-form"><p class="muted">Loading…</p></div>
+    </section>
+  </main>
+
+  <!-- ================================================================ PROMPT -->
+  <div id="prompt-overlay" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="dialog">
+      <div class="dialog-icon">✋</div>
+      <h2>Action required</h2>
+      <p class="muted small" id="prompt-test"></p>
+      <p id="prompt-text" class="prompt-text"></p>
+      <div class="dialog-actions">
+        <button id="prompt-stop" class="btn danger">Stop run</button>
+        <button id="prompt-continue" class="btn primary big">Done, continue</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
