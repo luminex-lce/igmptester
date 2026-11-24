@@ -4,7 +4,7 @@
 # - On MacOS, this will be something like "en0". Use `ifconfig` to get a list of the available network interfaces.
 # - On Windows, this will be the name of your ethernet adapter.
 #   Use `ipconfig` to get a list of the available network interfaces.
-IFACE = "TwinEth_1"
+IFACE = "Ethernet 3"
 
 # Set this to False if you don't want to run IGMPv3 tests
 # NOTE: devices don't have to implement IGMPv3 to support IGMPv3 membership queries. As outlined in section 2.5 of
@@ -17,7 +17,7 @@ SKIP_MANUAL = False
 
 # Set mgroup1 to the first multicast address which the DUT will receive
 # If using sACN, universe 1 corresponds with multicast address 239.255.0.1
-MGROUP_1 = "239.255.0.41"  # sACN universe 1
+MGROUP_1 = "239.255.0.1"  # sACN universe 1
 # MGROUP_1 = "239.255.255.255"  # Dante
 # MGROUP_1 = "224.0.0.251"  # mDNS
 
@@ -26,7 +26,7 @@ MGROUP_1 = "239.255.0.41"  # sACN universe 1
 # to receiving MGROUP_2.
 # If using sACN, universe 2 corresponds with multicast address 239.255.0.2
 # MGROUP_2 is only used in manual tests
-MGROUP_2 = "239.255.0.42"  # sACN universe 2
+MGROUP_2 = "239.255.0.2"  # sACN universe 2
 
 # When a single device transmits more than this amount of IGMP membership reports,
 # The test will fail. Sending too many membership reports can overwhelm the networking
