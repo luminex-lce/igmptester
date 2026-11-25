@@ -5,6 +5,7 @@ of devices that want to receive multicast data.
 from time import sleep
 import lib.packet as packet
 from lib.capture import capturing
+from lib.progress import Progress
 from lib.utils import check_interface_up, validate_igmpv2_reports, validate_igmpv2_packet_spacing
 from configuration import IFACE, MGROUP_1, RANDOMNESS_SAMPLE_COUNT, RANDOMNESS_MAX_RESPONSE_TIME
 
@@ -112,9 +113,12 @@ def test_unsolicited_membership_reports():
 
     pcap_file = "output/unsolicited_membership_reports.pcap"
     print(f"Start capture on interface {IFACE} to file {pcap_file}")
+    wait = 125 + 5
+    progress = Progress([wait])
     with capturing(IFACE, pcap_file):
         print("Wait default query interval + a little margin")
-        sleep(125 + 5)
+        progress.step("Listening for unsolicited membership reports")
+        sleep(wait)
 
     print("Check capture for V2 membership report")
     v2_membership_reports = packet.get_v2_membership_reports(pcap_file)
@@ -144,9 +148,13 @@ def test_maximum_response_time():
     check_interface_up()
 
     max_response_times = [1, 3, 5, 10, 20]
+    repeated_response_time = RANDOMNESS_MAX_RESPONSE_TIME
+    progress = Progress([t + 2 for t in max_response_times]
+                        + [repeated_response_time + 2] * RANDOMNESS_SAMPLE_COUNT)
     for response_time in max_response_times:
         pcap_file = f"output/maximum_response_time_{response_time}_sec.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
+        progress.step(f"Query with a maximum response time of {response_time} s")
         with capturing(IFACE, pcap_file):
             mrcode = response_time * 10
             print("Send IGMPv2 membership query")
@@ -162,11 +170,12 @@ def test_maximum_response_time():
     # the SAME maximum response time: pooling the responses to queries with
     # different maximums measures the spread of the maximums we chose ourselves, so
     # even a DUT that always answers at exactly the maximum would look random.
-    repeated_response_time = RANDOMNESS_MAX_RESPONSE_TIME
     response_times = []
     for attempt in range(RANDOMNESS_SAMPLE_COUNT):
         pcap_file = f"output/maximum_response_time_randomness_{attempt}.pcap"
         print(f"Start capture on interface {IFACE} to file {pcap_file}")
+        progress.step(f"Randomness sample {attempt + 1} of {RANDOMNESS_SAMPLE_COUNT} "
+                      f"({repeated_response_time} s)")
         with capturing(IFACE, pcap_file):
             print("Send IGMPv2 membership query")
             packet.send_igmp_v2_membership_query(mrcode=repeated_response_time * 10)

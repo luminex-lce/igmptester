@@ -191,6 +191,36 @@ open ./output/result.junit.html
 ```
 
 
+### Graphical user interface
+
+Instead of the command line, the tests can also be run from a web interface in your browser. It needs nothing
+beyond the packages above. Start it from the project folder, in the same elevated terminal and virtual environment
+you would use for pytest:
+
+```
+python ui/server.py
+```
+
+On Windows you can also double-click `setup.bat` once to create the virtual environment and install the packages,
+and then `start_ui.bat` to start the UI. It asks for administrator rights.
+
+Your browser opens at `http://127.0.0.1:8080/`. Use `--port` to pick a different port and `--no-browser` to not
+open a browser automatically. The server only listens on this computer (127.0.0.1).
+
+- **Test run**: pick the tests to run and press *Start test*. You see the progress, the test that is running and the
+  live pytest output. Manual tests show a dialog with the instruction for the operator and a *Continue* button.
+  When the run is done, every test shows its result, the failure details, any warnings and the capture files it
+  produced. You can open those files directly (for example in Wireshark), show them in their folder or download
+  them. Earlier runs are listed under *Previous runs*.
+- **Configuration**: edit the settings in `src/configuration.py` with a form. It lists the network interfaces of
+  this computer and their link state, and checks values (such as multicast addresses) before saving. Only the
+  values are rewritten; the comments in the file are kept.
+
+Each run from the UI gets its own folder `output/<date>_<time>/` with the capture files of that run, the JUnit
+report (`result.junit`), the console output (`console.log`) and a `summary.json` used by the UI.
+
+The UI runs pytest on the machine itself, so it is not meant for the Docker setup.
+
 ### Results
 
 Captures created during the test will be stored in the `output/` folder and can be used for reviewing and debugging
